@@ -1,0 +1,902 @@
+---
+title: 'Desafio Operações - Parte 2: Inferência Estatística'
+author: "Marcelo Moraes"
+date: "13/06/2019"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### 1. Interpolação
+
+Inicialmente, vale discutir um aspecto central deste análise: a quantidade de dados.
+Os dados utilizados, advindos do SGS/BACEN, muitas vezes, possuem periodicidade anual e começaram a ser computados pela instituição na metade ou final dos anos 2000.
+
+Assim, existe uma quantidade pequena de dados para que se possa realizar a maioria das modelagens matemáticas pertinentes. Problemas como overfitting, não significância estatística, entre outros ocorrem em casos como esse. Uma solução seria utilizar o modelo de previsão mais simples: média móvel.
+
+Entretanto, escolhi realizar uma interpolação linear com os dados de modo a criar um dataset maior, passando de anual para trimestral. O primeiro dado representará o dado do primeiro trimestre do primeiro ano e o último dado representará o dado do último trimestre do último ano. Com isso, a maioria dos modelos pode ser aplicada.
+
+Cabe ressaltar, assim, que esta análise parte da premissa de que o erro de previsão gerado pela interpolação é menor do que o gerado pela utilização do modelo de média móvel. Essa hipótese é suficientemente fraca para ser adotada sem problemas.
+
+### 2. Estrutura
+
+A análise será estruturada em 4 partes: caracterização das séries, modelagem, previsão e escolha do melhor modelo via Mean Squared Error (MSE). Os resultados será agrupados ao final. Previsões foram feitas até o final de 2020. No decorrer do documento, utilizarei testes econométricos e modelagens que serão explicados ao final do documento.
+
+As 5 análises escolhidas foram baseadas na análise exploratória contida no documento "DOp2 Exploratória". Por fim, destaco que as visualizações contém os níveis de confiança de 80% (azul escuro) e 95% (azul claro) e os dados ajustados em vermelho.
+
+Pacotes relevantes:
+
+```{r,message=FALSE}
+require(fBasics)
+require(tseries)
+require(devtools)
+require(FinTS)
+require(astsa)
+require(MLmetrics)
+require(forecast)
+require(BETS)
+require(ggplot2)
+require(rugarch)
+```
+
+### 3. Transações por Boleto em Canal Não presencial
+
+#### Caracterização
+
+```{r}
+serie<-BETSget(25162,data.frame=TRUE) #Download da série
+boletonpres<-ts(serie[,2],start=2010,frequency = 1) #Transformação em time serie
+aux<-length(serie[,2])*4
+boletonpres<-approx(serie[,2], y = NULL, method="linear", n=aux) #Interpolação Linear: Ano -> Trimestre
+boletonpres<-ts(boletonpres$y,start=2010,frequency = 4) #Transformação em time serie
+```
+
+```{r}
+round(basicStats(boletonpres, ci=0.95),1) #Tabela de Caracterização com Momentos
+```
+
+```{r}
+adf.test(boletonpres) #Testes de estacionariedade: adf e kpss
+kpss.test(boletonpres) #Testes de estacionariedade: adf e kpss
+```
+
+```{r}
+jarque.bera.test(boletonpres) #Teste de Normalidade: Jarque-Bera
+qqnorm(boletonpres) #Qqplot: análise de normalidade: quantis x quantis teóricos
+qqline(boletonpres,col="red") #Adicionando qqline
+```
+
+```{r}
+Box.test(boletonpres, lag=1) #Testes de Autocorrelação Box Pierce Ljung Box para 1 lag
+Box.test(boletonpres,type="Ljung-Box",lag=1)
+Box.test(boletonpres, lag=5) #Testes de Autocorrelação Box Pierce Ljung Box para 5 lags
+Box.test(boletonpres,type="Ljung-Box",lag=5)
+```
+
+```{r}
+ArchTest(boletonpres, lags=5) #Teste ARCH-LM para heterocedasticidade para s lags
+```
+
+Analisando os resultados para um nível de confiança de 95%, notamos que a série de transações por boleto em canal não presencial é **estacionária**, suficientemente **normal**, **autocorrelacionada** para o lag 1 e até o lag 5 e **heterocedástica** até lag 5.
+
+#### Modelagem e forecast
+
+```{r}
+#Modelagem simple exponential smoothing
+fit0<-ses(boletonpres)
+#Modelagem Holt-Winters:two-parameter exponential smoothing for linear trend without seasonal effect
+fit1<-holt(boletonpres,type="additive",h=12) #já contém forecast
+fit2<-holt(boletonpres,type="multiplicative",h=12) #já contém forecast
+#Modelagem ETS
+fit3<-ets(boletonpres)
+#Modelagem ARIMA/SARIMA
+fit4<-auto.arima(boletonpres)
+#Modelagem Neural network autoregression
+fit5<-nnetar(boletonpres, lambda = 0) #lambda = 0 para garantir valores positivos
+#Modelagem TBATS: Trigonometric terms for seasonality,Box-Cox transformations for heterogeneity,ARMA errors for short-term dynamics, Trend (possibly damped), Seasonal (including multiple and non-integer periods)
+fit6<-tbats(boletonpres)
+
+###Forecasting
+for0<-forecast(fit0,h=10)
+for1<-fit1 #função holt() já realiza previsão
+for2<-fit2 #função holt() já realiza previsão
+for3<-forecast(fit3,h=12)
+for4<-forecast(fit4,h=12)
+for5<-forecast(fit5,h=12,PI=TRUE)
+for6<-forecast(fit6,h=12)
+```
+
+#### Visualização
+
+```{r warning=FALSE}
+autoplot(for0)+autolayer(for0$fitted, series = "Fitted") + xlab("Anos") + ylab("Qtd. de transações por boleto por canal não presencial (milhão)") + theme(legend.position = "bottom",legend.title = element_blank())
+autoplot(for1)+autolayer(for1$fitted, series = "Fitted") + xlab("Anos") + ylab("Qtd. de transações por boleto por canal não presencial (milhão)") + theme(legend.position = "bottom",legend.title = element_blank())
+autoplot(for2)+autolayer(for2$fitted, series = "Fitted") + xlab("Anos") + ylab("Qtd. de transações por boleto por canal não presencial (milhão)") + theme(legend.position = "bottom",legend.title = element_blank())
+autoplot(for3)+autolayer(for3$fitted, series = "Fitted") + xlab("Anos") + ylab("Qtd. de transações por boleto por canal não presencial (milhão)") + theme(legend.position = "bottom",legend.title = element_blank())
+autoplot(for4)+autolayer(for4$fitted, series = "Fitted") + xlab("Anos") + ylab("Qtd. de transações por boleto por canal não presencial (milhão)") + theme(legend.position = "bottom",legend.title = element_blank())
+autoplot(for5)+autolayer(for5$fitted, series = "Fitted") + xlab("Anos") + ylab("Qtd. de transações por boleto por canal não presencial (milhão)") + theme(legend.position = "bottom",legend.title = element_blank())
+autoplot(for6)+autolayer(for6$fitted, series = "Fitted") + xlab("Anos") + ylab("Qtd. de transações por boleto por canal não presencial (milhão)") + theme(legend.position = "bottom",legend.title = element_blank())
+```
+
+#### Escolha do Melhor Modelo
+
+```{r}
+menorMSE<-min(MSE(for0$fitted,boletonpres),
+              MSE(for1$fitted,boletonpres),
+              MSE(for2$fitted,boletonpres),
+              MSE(for3$fitted,boletonpres),
+              MSE(for4$fitted,boletonpres),
+              MSE(na.omit(for5$fitted),boletonpres),
+              MSE(for6$fitted,boletonpres))
+```
+
+```{r}
+menorMSE == MSE(for0$fitted,boletonpres) #SES
+menorMSE == MSE(for1$fitted,boletonpres) #Holt-Winters Aditivo
+menorMSE == MSE(for2$fitted,boletonpres) #Holt-Winters Multiplicativo
+menorMSE == MSE(for3$fitted,boletonpres) #ETS
+menorMSE == MSE(for4$fitted,boletonpres) #ARIMA/SARIMA
+menorMSE == MSE(na.omit(for5$fitted),boletonpres) #Neural network autoregression
+menorMSE == MSE(for6$fitted,boletonpres) #TBATS
+```
+
+### 4. Quantidade de POSs
+
+#### Caracterização
+
+```{r}
+serie<-BETSget(24917,data.frame=TRUE) #Download da série
+qpos<-ts(serie[,2],start=2007,frequency = 1) #Transformação em time serie
+aux<-length(serie[,2])*4
+qpos<-approx(serie[,2], y = NULL, method="linear", n=aux) #Interpolação Linear: Ano -> Trimestre
+qpos<-ts(qpos$y,start=2007,frequency = 4) #Transformação em time serie
+```
+
+```{r}
+round(basicStats(qpos, ci=0.95),1) #Tabela de Caracterização com Momentos
+```
+
+```{r}
+adf.test(qpos) #Testes de estacionariedade: adf e kpss
+kpss.test(qpos) #Testes de estacionariedade: adf e kpss
+```
+
+```{r}
+jarque.bera.test(qpos) #Teste de Normalidade: Jarque-Bera
+qqnorm(qpos) #Qqplot: análise de normalidade: quantis x quantis teóricos
+qqline(qpos,col="red") #Adicionando qqline
+```
+
+```{r}
+Box.test(qpos, lag=1) #Testes de Autocorrelação Box Pierce Ljung Box para 1 lag
+Box.test(qpos,type="Ljung-Box",lag=1)
+Box.test(qpos, lag=5) #Testes de Autocorrelação Box Pierce Ljung Box para 5 lags
+Box.test(qpos,type="Ljung-Box",lag=5)
+```
+
+```{r}
+ArchTest(qpos, lags=5) #Teste ARCH-LM para heterocedasticidade para 5 lags
+```
+
+Analisando os resultados para um nível de confiança de 95%, notamos que a série de transações por boleto em canal não presencial é **não estacionária**, **não apresenta normalidade**, **autocorrelacionada** para o lag 1 e até o lag 5 e **heterocedástica** até lag 5.
+
+#### Modelagem e forecast
+
+```{r}
+#Modelagem simple exponential smoothing
+fit0<-ses(qpos)
+#Modelagem Holt-Winters:two-parameter exponential smoothing for linear trend without seasonal effect
+fit1<-holt(qpos,type="additive",h=8) #já contém forecast
+fit2<-holt(qpos,type="multiplicative",h=8) #já contém forecast
+#Modelagem ETS
+fit3<-ets(qpos)
+#Modelagem ARIMA/SARIMA
+fit4<-auto.arima(qpos)
+#Modelagem Neural network autoregression
+fit5<-nnetar(qpos, lambda = 0) #lambda = 0 para garantir valores positivos
+#Modelagem TBATS: Trigonometric terms for seasonality,Box-Cox transformations for heterogeneity,ARMA errors for short-term dynamics, Trend (possibly damped), Seasonal (including multiple and non-integer periods)
+fit6<-tbats(qpos)
+
+###Forecasting
+for0<-forecast(fit0,h=8)
+for1<-fit1 #função holt() já realiza previsão
+for2<-fit2 #função holt() já realiza previsão
+for3<-forecast(fit3,h=8)
+for4<-forecast(fit4,h=8)
+for5<-forecast(fit5,h=8,PI=TRUE)
+for6<-forecast(fit6,h=8)
+```
+
+#### Visualização
+
+```{r warning=FALSE}
+autoplot(for0)+autolayer(for0$fitted, series = "Fitted") + xlab("Anos") + ylab("Qtd. de POS's: Brasil (unidades)")+ theme(legend.position = "bottom",legend.title = element_blank())
+autoplot(for1)+autolayer(for1$fitted, series = "Fitted") + xlab("Anos") + ylab("Qtd. de POS's: Brasil (unidades)")+ theme(legend.position = "bottom",legend.title = element_blank())
+autoplot(for2)+autolayer(for2$fitted, series = "Fitted") + xlab("Anos") + ylab("Qtd. de POS's: Brasil (unidades)")+ theme(legend.position = "bottom",legend.title = element_blank())
+autoplot(for3)+autolayer(for3$fitted, series = "Fitted") + xlab("Anos") + ylab("Qtd. de POS's: Brasil (unidades)")+ theme(legend.position = "bottom",legend.title = element_blank())
+autoplot(for4)+autolayer(for4$fitted, series = "Fitted") + xlab("Anos") + ylab("Qtd. de POS's: Brasil (unidades)")+ theme(legend.position = "bottom",legend.title = element_blank())
+autoplot(for5)+autolayer(for5$fitted, series = "Fitted") + xlab("Anos") + ylab("Qtd. de POS's: Brasil (unidades)")+ theme(legend.position = "bottom",legend.title = element_blank())
+autoplot(for6)+autolayer(for6$fitted, series = "Fitted") + xlab("Anos") + ylab("Qtd. de POS's: Brasil (unidades)")+ theme(legend.position = "bottom",legend.title = element_blank())
+```
+
+#### Escolha do Melhor Modelo
+
+```{r}
+menorMSE<-min(MSE(for0$fitted,qpos),
+              MSE(for1$fitted,qpos),
+              MSE(for2$fitted,qpos),
+              MSE(for3$fitted,qpos),
+              MSE(for4$fitted,qpos),
+              MSE(na.omit(for5$fitted),qpos),
+              MSE(for6$fitted,qpos))
+```
+
+```{r}
+menorMSE == MSE(for0$fitted,qpos) #SES
+menorMSE == MSE(for1$fitted,qpos) #Holt-Winters Aditivo
+menorMSE == MSE(for2$fitted,qpos) #Holt-Winters Multiplicativo
+menorMSE == MSE(for3$fitted,qpos) #ETS
+menorMSE == MSE(for4$fitted,qpos) #ARIMA/SARIMA
+menorMSE == MSE(na.omit(for5$fitted),qpos) #Neural network autoregression
+menorMSE == MSE(for6$fitted,qpos) #TBATS
+```
+
+### 5. Transações por Instrumento de Pagamento: Cartão de Débito
+
+#### Caracterização
+
+```{r}
+serie<-BETSget(25224,data.frame=TRUE) #Download da série
+debito<-ts(serie[,2],start=2010,frequency = 1) #Transformação em time serie
+aux<-length(serie[,2])*4
+debito<-approx(serie[,2], y = NULL, method="linear", n=aux) #Interpolação Linear: Ano -> Trimestre
+debito<-ts(debito$y,start=2010,frequency = 4) #Transformação em time serie
+```
+
+```{r}
+round(basicStats(debito, ci=0.95),1) #Tabela de Caracterização com Momentos
+```
+
+```{r}
+adf.test(debito) #Testes de estacionariedade: adf e kpss
+kpss.test(debito) #Testes de estacionariedade: adf e kpss
+```
+
+```{r}
+jarque.bera.test(debito) #Teste de Normalidade: Jarque-Bera
+qqnorm(debito) #Qqplot: análise de normalidade: quantis x quantis teóricos
+qqline(debito,col="red") #Adicionando qqline
+```
+
+```{r}
+Box.test(debito, lag=1) #Testes de Autocorrelação Box Pierce Ljung Box para 1 lag
+Box.test(debito,type="Ljung-Box",lag=1)
+Box.test(debito, lag=5) #Testes de Autocorrelação Box Pierce Ljung Box para 5 lags
+Box.test(debito,type="Ljung-Box",lag=5)
+```
+
+```{r}
+ArchTest(debito, lags=5) #Teste ARCH-LM para heterocedasticidade para 5 lags
+```
+
+Analisando os resultados para um nível de confiança de 95%, notamos que a série de transações por boleto em canal não presencial é **não estacionária**, suficientemente **normal**, **autocorrelacionada** para o lag 1 e até o lag 5 e **heterocedástica** até lag 5.
+
+#### Modelagem e forecast
+
+```{r}
+#Modelagem simple exponential smoothing
+fit0<-ses(debito)
+#Modelagem Holt-Winters:two-parameter exponential smoothing for linear trend without seasonal effect
+fit1<-holt(debito,type="additive",h=12) #já contém forecast
+fit2<-holt(debito,type="multiplicative",h=12) #já contém forecast
+#Modelagem ETS
+fit3<-ets(debito)
+#Modelagem ARIMA/SARIMA
+fit4<-auto.arima(debito)
+#Modelagem Neural network autoregression
+fit5<-nnetar(debito, lambda = 0) #lambda = 0 para garantir valores positivos
+#Modelagem TBATS: Trigonometric terms for seasonality,Box-Cox transformations for heterogeneity,ARMA errors for short-term dynamics, Trend (possibly damped), Seasonal (including multiple and non-integer periods)
+fit6<-tbats(debito)
+
+###Forecasting
+for0<-forecast(fit0,h=10)
+for1<-fit1 #função holt() já realiza previsão
+for2<-fit2 #função holt() já realiza previsão
+for3<-forecast(fit3,h=12)
+for4<-forecast(fit4,h=12)
+for5<-forecast(fit5,h=12,PI=TRUE)
+for6<-forecast(fit6,h=12)
+```
+
+#### Visualização
+
+```{r warning=FALSE}
+autoplot(for0)+autolayer(for0$fitted, series = "Fitted") + xlab("Anos") + ylab("Transações por Cartão de Débito (milhões)")+ theme(legend.position = "bottom",legend.title = element_blank())
+autoplot(for1)+autolayer(for1$fitted, series = "Fitted") + xlab("Anos") + ylab("Transações por Cartão de Débito (milhões)")+ theme(legend.position = "bottom",legend.title = element_blank())
+autoplot(for2)+autolayer(for2$fitted, series = "Fitted") + xlab("Anos") + ylab("Transações por Cartão de Débito (milhões)")+ theme(legend.position = "bottom",legend.title = element_blank())
+autoplot(for3)+autolayer(for3$fitted, series = "Fitted") + xlab("Anos") + ylab("Transações por Cartão de Débito (milhões)")+ theme(legend.position = "bottom",legend.title = element_blank())
+autoplot(for4)+autolayer(for4$fitted, series = "Fitted") + xlab("Anos") + ylab("Transações por Cartão de Débito (milhões)")+ theme(legend.position = "bottom",legend.title = element_blank())
+autoplot(for5)+autolayer(for5$fitted, series = "Fitted") + xlab("Anos") + ylab("Transações por Cartão de Débito (milhões)")+ theme(legend.position = "bottom",legend.title = element_blank())
+autoplot(for6)+autolayer(for6$fitted, series = "Fitted") + xlab("Anos") + ylab("Transações por Cartão de Débito (milhões)")+ theme(legend.position = "bottom",legend.title = element_blank())
+```
+
+#### Escolha do Melhor Modelo
+
+```{r}
+menorMSE<-min(MSE(for0$fitted,debito),
+              MSE(for1$fitted,debito),
+              MSE(for2$fitted,debito),
+              MSE(for3$fitted,debito),
+              MSE(for4$fitted,debito),
+              MSE(na.omit(for5$fitted),debito),
+              MSE(for6$fitted,debito))
+```
+
+```{r}
+menorMSE == MSE(for0$fitted,debito) #SES
+menorMSE == MSE(for1$fitted,debito) #Holt-Winters Aditivo
+menorMSE == MSE(for2$fitted,debito) #Holt-Winters Multiplicativo
+menorMSE == MSE(for3$fitted,debito) #ETS
+menorMSE == MSE(for4$fitted,debito) #ARIMA/SARIMA
+menorMSE == MSE(na.omit(for5$fitted),debito) #Neural network autoregression
+menorMSE == MSE(for6$fitted,debito) #TBATS
+```
+
+### 6. Transações por Instrumento de Pagamento: Cartão de Crédito
+
+#### Caracterização
+
+```{r}
+serie<-BETSget(25223,data.frame=TRUE) #Download da série
+credito<-ts(serie[,2],start=2010,frequency = 1) #Transformação em time serie
+aux<-length(serie[,2])*4
+credito<-approx(serie[,2], y = NULL, method="linear", n=aux) #Interpolação Linear: Ano -> Trimestre
+credito<-ts(credito$y,start=2010,frequency = 4) #Transformação em time serie
+```
+
+```{r}
+round(basicStats(credito, ci=0.95),1) #Tabela de Caracterização com Momentos
+```
+
+```{r}
+adf.test(credito) #Testes de estacionariedade: adf e kpss
+kpss.test(credito) #Testes de estacionariedade: adf e kpss
+```
+
+```{r}
+jarque.bera.test(credito) #Teste de Normalidade: Jarque-Bera
+qqnorm(credito) #Qqplot: análise de normalidade: quantis x quantis teóricos
+qqline(credito,col="red") #Adicionando qqline
+```
+
+```{r}
+Box.test(credito, lag=1) #Testes de Autocorrelação Box Pierce Ljung Box para 1 lag
+Box.test(credito,type="Ljung-Box",lag=1)
+Box.test(credito, lag=5) #Testes de Autocorrelação Box Pierce Ljung Box para 5 lags
+Box.test(credito,type="Ljung-Box",lag=5)
+```
+
+```{r}
+ArchTest(credito, lags=5) #Teste ARCH-LM para heterocedasticidade para 5 lags
+```
+
+Analisando os resultados para um nível de confiança de 95%, notamos que a série de transações por boleto em canal não presencial é **não estacionária** (levando em consideração do teste KPSS, de maior potência), suficientemente **normal**, **autocorrelacionada** para o lag 1 e até o lag 5 e **heterocedástica** até lag 5.
+
+#### Modelagem e forecast
+
+```{r}
+#Modelagem simple exponential smoothing
+fit0<-ses(credito)
+#Modelagem Holt-Winters:two-parameter exponential smoothing for linear trend without seasonal effect
+fit1<-holt(credito,type="additive",h=12) #já contém forecast
+fit2<-holt(credito,type="multiplicative",h=12) #já contém forecast
+#Modelagem ETS
+fit3<-ets(credito)
+#Modelagem ARIMA/SARIMA
+fit4<-auto.arima(credito)
+#Modelagem Neural network autoregression
+fit5<-nnetar(credito, lambda = 0) #lambda = 0 para garantir valores positivos
+#Modelagem TBATS: Trigonometric terms for seasonality,Box-Cox transformations for heterogeneity,ARMA errors for short-term dynamics, Trend (possibly damped), Seasonal (including multiple and non-integer periods)
+fit6<-tbats(credito)
+
+###Forecasting
+for0<-forecast(fit0,h=10)
+for1<-fit1 #função holt() já realiza previsão
+for2<-fit2 #função holt() já realiza previsão
+for3<-forecast(fit3,h=12)
+for4<-forecast(fit4,h=12)
+for5<-forecast(fit5,h=12,PI=TRUE)
+for6<-forecast(fit6,h=12)
+```
+
+#### Visualização
+
+```{r warning=FALSE}
+autoplot(for0)+autolayer(for0$fitted, series = "Fitted") + xlab("Anos") + ylab("Transações por Cartão de Crédito (milhões)")+ theme(legend.position = "bottom",legend.title = element_blank())
+autoplot(for1)+autolayer(for1$fitted, series = "Fitted") + xlab("Anos") + ylab("Transações por Cartão de Crédito (milhões)")+ theme(legend.position = "bottom",legend.title = element_blank())
+autoplot(for2)+autolayer(for2$fitted, series = "Fitted") + xlab("Anos") + ylab("Transações por Cartão de Crédito (milhões)")+ theme(legend.position = "bottom",legend.title = element_blank())
+autoplot(for3)+autolayer(for3$fitted, series = "Fitted") + xlab("Anos") + ylab("Transações por Cartão de Crédito (milhões)")+ theme(legend.position = "bottom",legend.title = element_blank())
+autoplot(for4)+autolayer(for4$fitted, series = "Fitted") + xlab("Anos") + ylab("Transações por Cartão de Crédito (milhões)")+ theme(legend.position = "bottom",legend.title = element_blank())
+autoplot(for5)+autolayer(for5$fitted, series = "Fitted") + xlab("Anos") + ylab("Transações por Cartão de Crédito (milhões)")+ theme(legend.position = "bottom",legend.title = element_blank())
+autoplot(for6)+autolayer(for6$fitted, series = "Fitted") + xlab("Anos") + ylab("Transações por Cartão de Crédito (milhões)")+ theme(legend.position = "bottom",legend.title = element_blank())
+```
+
+#### Escolha do Melhor Modelo
+
+```{r}
+menorMSE<-min(MSE(for0$fitted,credito),
+              MSE(for1$fitted,credito),
+              MSE(for2$fitted,credito),
+              MSE(for3$fitted,credito),
+              MSE(for4$fitted,credito),
+              MSE(na.omit(for5$fitted),credito),
+              MSE(for6$fitted,credito))
+```
+
+```{r}
+menorMSE == MSE(for0$fitted,credito) #SES
+menorMSE == MSE(for1$fitted,credito) #Holt-Winters Aditivo
+menorMSE == MSE(for2$fitted,credito) #Holt-Winters Multiplicativo
+menorMSE == MSE(for3$fitted,credito) #ETS
+menorMSE == MSE(for4$fitted,credito) #ARIMA/SARIMA
+menorMSE == MSE(na.omit(for5$fitted),credito) #Neural network autoregression
+menorMSE == MSE(for6$fitted,credito) #TBATS
+```
+
+### 7. Transações por Instrumento de Pagamento: Transferências
+
+#### Caracterização
+
+```{r}
+serie<-BETSget(25227,data.frame=TRUE) #Download da série
+transf<-ts(serie[,2],start=2010,frequency = 1) #Transformação em time serie
+aux<-length(serie[,2])*4
+transf<-approx(serie[,2], y = NULL, method="linear", n=aux) #Interpolação Linear: Ano -> Trimestre
+transf<-ts(transf$y,start=2010,frequency = 4) #Transformação em time serie
+```
+
+```{r}
+round(basicStats(transf, ci=0.95),1) #Tabela de Caracterização com Momentos
+```
+
+```{r}
+adf.test(transf) #Testes de estacionariedade: adf e kpss
+kpss.test(transf) #Testes de estacionariedade: adf e kpss
+```
+
+```{r}
+jarque.bera.test(transf) #Teste de Normalidade: Jarque-Bera
+qqnorm(transf) #Qqplot: análise de normalidade: quantis x quantis teóricos
+qqline(transf,col="red") #Adicionando qqline
+```
+
+```{r}
+Box.test(transf, lag=1) #Testes de Autocorrelação Box Pierce Ljung Box para 1 lag
+Box.test(transf,type="Ljung-Box",lag=1)
+Box.test(transf, lag=5) #Testes de Autocorrelação Box Pierce Ljung Box para 5 lags
+Box.test(transf,type="Ljung-Box",lag=5)
+```
+
+```{r}
+ArchTest(transf, lags=5) #Teste ARCH-LM para heterocedasticidade para 5 lags
+```
+
+Analisando os resultados para um nível de confiança de 95%, notamos que a série de transações por boleto em canal não presencial é **não estacionária**, **não apresenta normalidade**, **autocorrelacionada** para o lag 1 e até o lag 5 e **heterocedástica** até lag 5.
+
+#### Modelagem e forecast
+
+```{r}
+#Modelagem simple exponential smoothing
+fit0<-ses(transf)
+#Modelagem Holt-Winters:two-parameter exponential smoothing for linear trend without seasonal effect
+fit1<-holt(transf,type="additive",h=12) #já contém forecast
+fit2<-holt(transf,type="multiplicative",h=12) #já contém forecast
+#Modelagem ETS
+fit3<-ets(transf)
+#Modelagem ARIMA/SARIMA
+fit4<-auto.arima(transf)
+#Modelagem Neural network autoregression
+fit5<-nnetar(transf, lambda = 0) #lambda = 0 para garantir valores positivos
+#Modelagem TBATS: Trigonometric terms for seasonality,Box-Cox transformations for heterogeneity,ARMA errors for short-term dynamics, Trend (possibly damped), Seasonal (including multiple and non-integer periods)
+fit6<-tbats(transf)
+
+###Forecasting
+for0<-forecast(fit0,h=10)
+for1<-fit1 #função holt() já realiza previsão
+for2<-fit2 #função holt() já realiza previsão
+for3<-forecast(fit3,h=12)
+for4<-forecast(fit4,h=12)
+for5<-forecast(fit5,h=12,PI=TRUE)
+for6<-forecast(fit6,h=12)
+```
+
+#### Visualização
+
+```{r warning=FALSE}
+autoplot(for0)+autolayer(for0$fitted, series = "Fitted") + xlab("Anos") + ylab("Transações por Transferência (milhões)")+ theme(legend.position = "bottom",legend.title = element_blank())
+autoplot(for1)+autolayer(for1$fitted, series = "Fitted") + xlab("Anos") + ylab("Transações por Transferência (milhões)")+ theme(legend.position = "bottom",legend.title = element_blank())
+autoplot(for2)+autolayer(for2$fitted, series = "Fitted") + xlab("Anos") + ylab("Transações por Transferência (milhões)")+ theme(legend.position = "bottom",legend.title = element_blank())
+autoplot(for3)+autolayer(for3$fitted, series = "Fitted") + xlab("Anos") + ylab("Transações por Transferência (milhões)")+ theme(legend.position = "bottom",legend.title = element_blank())
+autoplot(for4)+autolayer(for4$fitted, series = "Fitted") + xlab("Anos") + ylab("Transações por Transferência (milhões)")+ theme(legend.position = "bottom",legend.title = element_blank())
+autoplot(for5)+autolayer(for5$fitted, series = "Fitted") + xlab("Anos") + ylab("Transações por Transferência (milhões)")+ theme(legend.position = "bottom",legend.title = element_blank())
+autoplot(for6)+autolayer(for6$fitted, series = "Fitted") + xlab("Anos") + ylab("Transações por Transferência (milhões)")+ theme(legend.position = "bottom",legend.title = element_blank())
+```
+
+#### Escolha do Melhor Modelo
+
+```{r}
+menorMSE<-min(MSE(for0$fitted,transf),
+              MSE(for1$fitted,transf),
+              MSE(for2$fitted,transf),
+              MSE(for3$fitted,transf),
+              MSE(for4$fitted,transf),
+              MSE(na.omit(for5$fitted),transf),
+              MSE(for6$fitted,transf))
+```
+
+```{r}
+menorMSE == MSE(for0$fitted,transf) #SES
+menorMSE == MSE(for1$fitted,transf) #Holt-Winters Aditivo
+menorMSE == MSE(for2$fitted,transf) #Holt-Winters Multiplicativo
+menorMSE == MSE(for3$fitted,transf) #ETS
+menorMSE == MSE(for4$fitted,transf) #ARIMA/SARIMA
+menorMSE == MSE(na.omit(for5$fitted),transf) #Neural network autoregression
+menorMSE == MSE(for6$fitted,transf) #TBATS
+```
+
+
+### 8. Resultados Parciais?
+
+As **transações por boleto em canal não presencial são melhor modeladas por modelagem ARIMA, ao passo que a quantidade de POSs e transações por instrumento (cartão de débito, crédito e transferências) foram melhor modeladas por Neural network autoregression**. Entretanto, foram considerados, até agora, modelos que não consideram a heterocedasticidade que foi verificada nas séries.
+
+De tal modo, foi testada a modelagem da família GARCH(1,1) (modelo APARCH, pois generaliza diversos modelos da família) na modelagem ARIMA para verificar se, com isso, o resultado será melhor do que os resultados obtidos até aqui. Cabe ressaltar que a distribuição de probabilidade escolhida para cada caso diz respeito ao seu resultado do teste Jarque-Bera (normalidade), bem como a análise dos 3º e 4º momentos presentes na tabela descritiva das séries.
+
+Entretanto, ou a quantidade de dados não foi suficiente para que a otimização numérica pertinente ao modelo convergisse ou a previsão apresentou resultado constante e igual ao último dado analisado, demonstrando ou overfitting ou insuficiência por parte dos parâmetros calculados. Abaixo, segue um exemplo deste último ponto.
+
+```{r warning=FALSE}
+serie<-BETSget(25162,data.frame=TRUE) #Download da série
+boletonpres<-ts(serie[,2],start=2010,frequency = 1) #Transformação em time serie
+aux<-length(serie[,2])*4
+boletonpres<-approx(serie[,2], y = NULL, method="linear", n=aux) #Interpolação Linear: Ano -> Trimestre
+boletonpres<-ts(boletonpres$y,start=2010,frequency = 4) #Transformação em time serie
+
+fit.spec1 <- ugarchspec(variance.model = list(model="apARCH", garchOrder=c(1,1), submodel=NULL, variance.targeting=FALSE),mean.model = list(armaOrder=c(1,1,1), include.mean=FALSE), distribution.model="norm")
+
+fit1 <- ugarchfit(fit.spec1,boletonpres,solver="gosolnp")
+
+spec<- getspec(fit1)
+setfixed(spec)<-as.list(coef(fit1))
+
+for1<-ugarchforecast(spec, n.ahead=12,data=boletonpres)
+plot(for1, which = 1)
+```
+
+De tal modo, temos como resultado as modelagens dos itens 3 a 7.
+
+### 9. Resultados
+
+#### 9.1 Resultado: Transações por Boleto em Canal Não presencial
+
+```{r}
+serie<-BETSget(25162,data.frame=TRUE) #Download da série
+boletonpres<-ts(serie[,2],start=2010,frequency = 1) #Transformação em time serie
+aux<-length(serie[,2])*4
+boletonpres<-approx(serie[,2], y = NULL, method="linear", n=aux) #Interpolação Linear: Ano -> Trimestre
+boletonpres<-ts(boletonpres$y,start=2010,frequency = 4) #Transformação em time serie
+```
+
+```{r}
+###Resultado
+forcasting<-forecast(auto.arima(boletonpres),h=12)
+forecasting2<-as.data.frame(forcasting$mean)
+crescimento19<-((forecasting2[nrow(forecasting2)-4,]/forecasting2[nrow(forecasting2)-7,])-1)*100
+crescimento20<-((forecasting2[nrow(forecasting2),]/forecasting2[nrow(forecasting2)-3,])-1)*100
+```
+
+**Transações por Boleto em Canal Não presencial**
+
+**Variação projetada para 2019: `r round(crescimento19,2)`%**
+
+**Variação projetada para 2020: `r round(crescimento20,2)`%**
+
+
+#### 9.2 Resultado: Quantidade de POSs
+
+```{r}
+serie<-BETSget(24917,data.frame=TRUE) #Download da série
+qpos<-ts(serie[,2],start=2007,frequency = 1) #Transformação em time serie
+aux<-length(serie[,2])*4
+qpos<-approx(serie[,2], y = NULL, method="linear", n=aux) #Interpolação Linear: Ano -> Trimestre
+qpos<-ts(qpos$y,start=2007,frequency = 4) #Transformação em time serie
+```
+
+```{r}
+###Resultado
+forcasting<-forecast(nnetar(qpos, lambda = 0),h=8)
+forecasting2<-as.data.frame(forcasting$mean)
+crescimento19<-((forecasting2[nrow(forecasting2)-4,]/forecasting2[nrow(forecasting2)-7,])-1)*100
+crescimento20<-((forecasting2[nrow(forecasting2),]/forecasting2[nrow(forecasting2)-3,])-1)*100
+```
+
+**Quantidade de POSs**
+
+**Variação projetada para 2019: `r round(crescimento19,2)`%**
+
+**Variação projetada para 2020: `r round(crescimento20,2)`%**
+
+
+#### 9.3 Resultado: Transações por Instrumento de Pagamento: Cartão de Débito
+
+```{r}
+serie<-BETSget(25224,data.frame=TRUE) #Download da série
+debito<-ts(serie[,2],start=2010,frequency = 1) #Transformação em time serie
+aux<-length(serie[,2])*4
+debito<-approx(serie[,2], y = NULL, method="linear", n=aux) #Interpolação Linear: Ano -> Trimestre
+debito<-ts(debito$y,start=2010,frequency = 4) #Transformação em time serie
+```
+
+```{r}
+###Resultado
+forcasting<-forecast(nnetar(debito, lambda = 0),h=12)
+forecasting2<-as.data.frame(forcasting$mean)
+crescimento19<-((forecasting2[nrow(forecasting2)-4,]/forecasting2[nrow(forecasting2)-7,])-1)*100
+crescimento20<-((forecasting2[nrow(forecasting2),]/forecasting2[nrow(forecasting2)-3,])-1)*100
+```
+
+**Transações por Instrumento de Pagamento: Cartão de Débito**
+
+**Variação projetada para 2019: `r round(crescimento19,2)`%**
+
+**Variação projetada para 2020: `r round(crescimento20,2)`%**
+
+
+#### 9.4 Resultado: Transações por Instrumento de Pagamento: Cartão de Crédito
+
+```{r}
+serie<-BETSget(25223,data.frame=TRUE) #Download da série
+credito<-ts(serie[,2],start=2010,frequency = 1) #Transformação em time serie
+aux<-length(serie[,2])*4
+credito<-approx(serie[,2], y = NULL, method="linear", n=aux) #Interpolação Linear: Ano -> Trimestre
+credito<-ts(credito$y,start=2010,frequency = 4) #Transformação em time serie
+```
+
+```{r}
+###Resultado
+forcasting<-forecast(nnetar(credito, lambda = 0),h=12)
+forecasting2<-as.data.frame(forcasting$mean)
+crescimento19<-((forecasting2[nrow(forecasting2)-4,]/forecasting2[nrow(forecasting2)-7,])-1)*100
+crescimento20<-((forecasting2[nrow(forecasting2),]/forecasting2[nrow(forecasting2)-3,])-1)*100
+```
+
+**Transações por Instrumento de Pagamento: Cartão de Crédito**
+
+**Variação projetada para 2019: `r round(crescimento19,2)`%**
+
+**Variação projetada para 2020: `r round(crescimento20,2)`%**
+
+
+#### 9.5 Resultado: Transações por Instrumento de Pagamento: Transferências
+
+```{r}
+serie<-BETSget(25227,data.frame=TRUE) #Download da série
+transf<-ts(serie[,2],start=2010,frequency = 1) #Transformação em time serie
+aux<-length(serie[,2])*4
+transf<-approx(serie[,2], y = NULL, method="linear", n=aux) #Interpolação Linear: Ano -> Trimestre
+transf<-ts(transf$y,start=2010,frequency = 4) #Transformação em time serie
+```
+
+```{r}
+###Resultado
+forcasting<-forecast(nnetar(transf, lambda = 0),h=12)
+forecasting2<-as.data.frame(forcasting$mean)
+crescimento19<-((forecasting2[nrow(forecasting2)-4,]/forecasting2[nrow(forecasting2)-7,])-1)*100
+crescimento20<-((forecasting2[nrow(forecasting2),]/forecasting2[nrow(forecasting2)-3,])-1)*100
+```
+
+**Transações por Instrumento de Pagamento: Transferências**
+
+**Variação projetada para 2019: `r round(crescimento19,2)`%**
+
+**Variação projetada para 2020: `r round(crescimento20,2)`%**
+
+
+### 10.Testes Econométricos e Modelagens Matemáticas
+
+
+#### 10. 1 Teste Dickey-Fuller Aumentado (ADF) para Estacionariedade
+
+O teste ADF para Estacionariedade estuda a seguinte regressão:
+
+$\Delta y_{t}= \beta_{1} + \beta_{2}t + \delta y_{t-1} + \sum_{i=1}^{m}\alpha_{i} \Delta y_{t-1} + \varepsilon_{t}$
+
+com $\beta_{1}$ sendo o intercepto (drift), $\beta_{2}$ o coeficiente de tendência, $\varepsilon$ o coeficiente de presença de raíz unitária e $m$ o número de defasagens tomadas.
+
+Estatística do teste: $\Gamma = \frac{\hat{\delta}}{se(\hat{\delta})}$
+
+Os valores críticos do teste foram tabelados através de simulação de Monte Carlo
+
+Hipótese Nula: $H_{0}: \delta = 0$
+
+Hipótese Alternativa: $H_{0}: \delta \neq  0$
+
+
+#### 10.2 Teste Kwiatkowski, Phillips, Schmidt and Shin (KPSS) para Estacionariedade
+
+Considera o seguinte modelo para análise de estacionariedade:
+
+$r_{t}= r_{t-1} + u_{t}$
+$r_{t}=r_{t-1}+u_{t}\,;\,u_{t}\sim iid(0,\sigma _{u}^{2})$
+
+Calcula-se a soma dos resíduos: $S_{t}=\sum_{i=1}^{T}\varepsilon_{i}$
+
+Estatística do teste: $LM= \sum_{t=1}^{N} \frac{S_{t}^{2}}{N^{2}\hat{\sigma}_{\varepsilon}^{2}}$
+
+A estatística $LM$ tem distribuição que converge assintoticamente para um Movimento Browniano com valores críticos tabelados.
+
+Hipótese nula: $H_{0}: série\,estacionária$
+
+Hipótese alternativa: $H_{1}: série\,não\,estacionária$
+
+#### 10.3 Teste Jarque-Bera para Normalidade
+
+Para a distribuição normal, temos que assimetria = 0 e Kurtose = 3.
+
+Os estimadores para média e variância são:
+
+$\hat{\mu}=\frac{1}{N} \sum_{i=1}^{N}X_{i}$
+$\hat{\sigma}^{2} = \frac{1}{N} \sum_{i=1}^{N}(X_{i}-\hat{\mu})^{2}$
+
+Os estimadores para assimetria e kurtose são:
+
+$\hat{A}=\frac{\frac{\sum_{i=1}^{N}(X_{i}-\hat{\mu})^{3}}{N}}{\hat{\sigma}^{3}}$
+$\hat{K}=\frac{\frac{\sum_{i=1}^{N}(X_{i}-\hat{\mu})^{4}}{N}}{\hat{\sigma}^{4}}$
+
+Temos que $\hat{A}\sim N(0,\frac{6}{N})$ e $\hat{K}\sim N(3,\frac{24}{N})$
+
+Estatística do teste: 
+$JB=(\frac{\hat{A}-0}{\sqrt{\frac{6}{N}}})^{2}+(\frac{\hat{K}-3}{\sqrt{\frac{24}{N}}})^{2}$
+
+$JB$ distribui-se como uma distribuição qui-quadrado com 2 graus de liberado.
+
+Hipótese nula: $H_{0}:\,X_{t}\,distribui-se\,normalmente$
+
+Hipótese alternativa: $H_{1}:\,X_{t}\,não\,se\,distribui\,normalmente$
+
+Cabe destacar que a verificação de normalidade também pode ser feita visualmente através da plotagem dos quantis contra os quantis teóricos de uma normal.
+
+
+#### 10.4 Testes Box-Pierce e Ljung-Box para Autocorrelação
+
+Estatísticas dos testes:
+$Q(k) = N\sum_{j=1}^{k} \hat{\rho}_{j}^{2}(\hat{\varepsilon})\,\,e\,\,LB(k)=N(N+2)\sum_{j=1}^{k}(N-j)^{-1}\hat{\rho}_{j}^{2}(\hat{\varepsilon})$
+
+com $\hat{\varepsilon}_{t}$ sendo o resíduo do modelo e $\hat{\rho}_{j}(\hat{\varepsilon})$ é dado por:
+
+$\hat{\rho}_{j}(\hat{\varepsilon})=\frac{\sum_{t=j+1}^{N}\hat{\varepsilon}_{t}\hat{\varepsilon}_{t-j}}{\sum_{t=1}^{N}\hat{\varepsilon}_{2}^{t}}$
+
+Em um modelo ARMA(p,q), as estatísticas Q(Box-Pierce) e LB(Ljung-Box) distribuem-se como uma distribuição qui-quadrado com k-p-q graus de liberdade.
+
+Hipótese nula: $H_{0}:\rho_{0}=\rho_{2}=\,...\,\rho_{k}=0$
+
+Hipótese alternativa: $H_{1}:\,pelo\,menos\,um\,\rho\,não\,é\,nulo.$
+
+#### 10.5 Teste ARCH-LM de Heterocedasticidade
+
+Considerando $\varepsilon_{t}$ os resíduos do modelo estimado, o teste ARCH-LM testa a dependência dos quadrados dos resíduos conforme a seguinte regressão:
+
+$\varepsilon_{t}^{2} = \alpha_{0} + \alpha_{1}\varepsilon_{t-1}^{2} + \alpha_{2}\varepsilon_{t-2}^{2}+\,...\,+\alpha_{p}\varepsilon_{t-p}^{2}$
+
+Estatística do teste: $TR^{2}$ com o primeiro termo sendo o tamanho da série e o segundo o coeficiente de determinação da regressão.
+
+A estatística do teste distribui-se como uma distribuição qui-quadrado com p graus de liberadade.
+
+Hipótese nula: $H_{0}:não\,há\,efeito\,ARCH(heterocedasticidade)$
+
+Hipótese alternativa: $H_{1}:há\,efeito\,ARCH$
+
+
+#### 10.6 Modelagem SES
+
+$\hat{y}_{T+1|T}=\alpha y_{T} + \alpha(1-\alpha) y_{T-1}+\alpha(1-\alpha)^{2} y_{T-2}+\,...$
+
+com $0\leq \alpha\leq 1$ sendo o parâmetro de suavização. A previsão será uma média ponderada de todas as observações da série.
+
+
+#### 10.7 Modelagem Holt-Winter
+
+O modelo é composto por uma equação de previsão e 3 equações de suavização, uma para o nível $l_{t}$, uma para a tendência $b_{t}$ e uma para o componente sazonal $s_{t}$. O termo $m$ denota frequência ou sazonalidade.
+
+Modelagem Aditiva:
+$\hat{y}_{t+h|t}=l_{t}+hb_{t}+s_{t+h-m(k+1)}\\l_{t}=\alpha(y_{t}-s_{t-m})+(1-\alpha)(l_{t-1}+b_{t-1})\\b_{t}=\beta^{*}(l_{t}-l_{t-1})+(1-\beta^{*})b_{t-1}\\s_{t}=\gamma(y_{t}-l_{t-1}-b_{t-1})+(1-\gamma)s_{t-m}\\com\, 0\leq \gamma \leq 1-\alpha$
+
+Modelagem Multiplicativa:
+$\hat{y}_{t+h|t}=(l_{t}+hb_{t})s_{t+h-m(k+1)}\\l_{t}=\alpha \frac{y_{t}}{s_{t-m}}+(1-\alpha)(l_{t-1}+b_{t-1})\\b_{t}=\beta^{*} (l_{t}-l_{t-1})+(1-\beta^{*})b_{t-1}\\s_{t}=\gamma \frac{y_{t}}{(l_{t-1}+b_{t-1})}+(1-\gamma)s_{t-m}$
+
+
+#### 10.8 Modelagem ETS
+
+Modelagem ETS(M,A,M):
+
+Novamente, lidamos com nível, tendência e sazonalidade:
+
+$y_{t}=(l_{t-1}+b_{t-1})s_{t-m}(1+\varepsilon_{t})\\l_{t}=(l_{t-1}+b_{t-1})(1+\alpha \varepsilon_{t})\\b_{t}=b_{t-1}+\beta(l_{t-1}+b_{t-1})\varepsilon_{t}\\s_{t}=s_{t-m}(1+\gamma  \varepsilon_{t})$
+
+Pontos de previsão são obtidos pelos modelos pela iteração das equações por $t=T+1\,,\,...\,,\,T+h\,com\,\varepsilon_{t}=0\,\,para\,\,t>T$.
+
+
+#### 10.9 Modelagem ARIMA/SARIMA
+
+Modelagem ARIMA(p,q,d):
+
+$y_{t}^{(d)}=c+\phi_{1} y_{t-1}^{(d)} +\,...\,+\phi_{p} y_{t-p}^{(d)}+\theta_{1}\varepsilon_{t-1}+\,...\,\theta_{q}\varepsilon_{t-q}+\varepsilon_{t}$
+
+e temos que p é a ordem da parte autoregressiva, d é o número de diferenciações e q é ordem da parte de média móvel.
+
+Utilizando o operador lag B, chegamos a:
+
+$(1-\phi_{1}B-\,...\,\phi_{p}B^{p})(1-B)^{d}y_{t}=c+(1+\theta_{1}B+\,...\,+\theta_{q}B^{q})\varepsilon_{t}$
+
+Quando adicionamos a possibilidade de haver sazonalidade, teremos o modelo ARIMA sazonal ou SARIMA.
+
+Modelagem SARIMA(p,q,d)(P,Q,D)m:
+
+A parte sazonal consiste em termos similares à não sazonal, mas envolvendo operadores lags da sazonalidade em questão.
+
+Por exemplo, o modelo SARIMA(1,1,1)(1,1,1)4, sem o termos contante e para m = 4 (dados trimestrais) poderia ser escrito como:
+
+$(1-\phi_{1}B)(1-\Phi_{1}B^{4})(1-B)(1-B^{4})y_{t}=(1+\theta_{1}B)(1+\Theta_{1}B^{4})\varepsilon_{t}$
+
+Previsão com ARIMA:
+* Expande-se a equação ARIMA para que $y_{t}$ fique do lado esquerdo e todos os outros termos no lado direito.
+
+* Reescreve-se a equação substituindo $t$ por $T+h$.
+
+* Do lado esquerdo da equação, substitui-se observações futuas por suas previsões, erros futuros por zero e os erros passados por seus resíduos correspondentes.
+
+O ajuste do modelo no R é feito pela função auto.arima(), detalhada a seguir.
+
+
+#### 10.10 Algoritmo da função auto.arima()
+
+A função auto.arima() segue uma variação do [algoritmo Hyndman-Khandakar(2008)](https://www.jstatsoft.org/article/view/v027i03), que combina testes de raíz unitária, minimização de AICs (critério de seleção de modelo Akaike) e estimação por máxima verossimilhança para obter o modelo ARIMA.
+
+
+#### Modelagem NNA
+
+Redes neurais pode ser entendidas como uma rede de neurônios organizados em camadas. Os inputs formam a camada de entrada e os outputs/forecasts a camada de saída, também podem haver camadas intermediárias como "neurônios ocultos".
+
+Cara neurônio se conecta aos demais através de ligações com pesos. Cada neurônio recebe uma combinação linear dos outputs dos anteriores pelos pesos ou, se for um neurônio na camada de entrada, um input. Cada neurônio possui uma função de ativação que recebe seu input e o transforma, gerando seu output. Essa função pode ser linear, normal, sigmóide, entre outras.
+
+Com séries temporaid, podemos utilizar valores defasados como input da rede neural, gerando uma Neural Network Autoregression (NNA). A função nnetar() ajusta uma NNA(p,P,k)m aos dados, com p o número de inputs de série defasada, P o únido de camadas intermediárias, k o número de neurônios na camada intermediária e m representa valores defasados relacionados a sazonalidade.
+
+Os pesos são selecionados utilizando um algoritmo de aprendizagem que minimiza uma função custo que pode ser, por exemplo, o MSE.
+
+
+#### 10.11 Modelagem TBATS
+
+Para problemas com padrões de sazonalidade mais complexos, a modelagem TBATS,devenvolvida em [Livera, Hyndman e Snyder (2011)](https://robjhyndman.com/publications/complex-seasonality/) utiliza uma combinação de termos de Fourier com um modelo de estado-estaço de suavização exponencial e uma transformação Box-Cox. Ele difere do modelo clássico para casos do tipo, regressão harmônica, por permitie mudanças mais vagarosas de acordo com a sazonalidade.
+
+
+#### 10.12 Modelagem Família GARCH
+
+Os modelos da família GARCH levam em consideração a heterocedasticidade, de tal modo que, usamos juntamente com o modelo ARIMA, realizam ajustem melhores.
+
+Modelagem GARCH(1,1):
+
+$y_{t}=h_{t}^{\frac{1}{2}}\varepsilon_{t}\\h_{t}=\omega +\alpha y_{t-1}^{2}+\beta h_{t-1}$
+
+com $h_{t}$ sendo a variância e $\varepsilon_{t}\sim NID(0,1)$.
+
+Modelagem ARIMA(p,q,d)-GARCH(1,1):
+$y_{t}^{(d)}=c+\phi_{1} y_{t-1}^{(d)} +\,...\,+\phi_{p} y_{t-p}^{(d)}+\theta_{1}\varepsilon_{t-1}+\,...\,\theta_{q}\varepsilon_{t-q}+\varepsilon_{t}\\\varepsilon_{t}=h_{t}^{\frac{1}{2}}\nu_{t}$
+
+Esses são os modelos mais simples e a família de modelos GARCH compreende diversas modelagens, como EGARCH,TARCH,APARCH, entre outras. A modelagem APARCH generaliza diversas dessas modelgens em apenas uma. 
+
+Modelagem APARCH(p,q):
+$\nu=h_{t}^{\frac{1}{2}} \varepsilon_{t}\,\,com\,\,\varepsilon_{t}\sim N(0,1)\\h_{t}^{\frac{\delta}{2}}=\omega + \sum_{i=1}^{q}\alpha_{i}(|\nu_{t-i}|-\gamma_{i}\nu_{t-i}])^{\gamma}+\sum_{j=1}^{p}\beta_{j}h_{t-j}^{\frac{\delta}{2}}$

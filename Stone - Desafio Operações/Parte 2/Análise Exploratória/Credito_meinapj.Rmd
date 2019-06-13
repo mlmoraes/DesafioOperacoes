@@ -1,0 +1,401 @@
+---
+title: "Exploratória Crédito: MEI na PJ"
+author: "Marcelo Moraes"
+date: "13/06/2019"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Este documento se refere à análise exploratória realizada com os principais dados relativos a modalidades de crédito. A fonte de todos os dados é o SGS/BACEN. Os primeiros códigos serão mostrados e, em seguida, os próximos ocultados por seguirem a mesma lógica. O código completo pode ser encontrado no arquivo "Análise Exploratória Geral.R".
+
+Primeiro, os pacotes pertinentes devem ser instalados e abertos para utilização. Além disso, 3 variáveis relevantes ao processo de deflacionamento são criadas.
+
+```{r,message=FALSE}
+require("BETS")
+require("ggplot2")
+
+anopassado<-as.numeric(format(Sys.Date(), "%Y"))-1
+anopassadodata<-paste0(anopassado,"-01-01")
+ultimotrianopassado<-paste0(anopassado,"-10-01")
+```
+
+### Saldo Real, Quantidade de Operações, Quantidade de Clientes e Valor Médio Real
+
+Dados:
+
+```{r}
+series<-c(27308) ######NÚMERO DE TOMADORES DE CRÉDITO PJ PORTE (unid. mil)
+
+tom_credmpj<-NULL
+for(i in series){
+  assign(paste0("tom_credmpj_",i),BETSget(i,data.frame=TRUE))
+  tom_credmpj[[i]]<-get(paste0("tom_credmpj_",i))
+} 
+
+tom_credmpj_data<-do.call(rbind, tom_credmpj)
+
+a<-1
+b<-nrow(tom_credmpj_27308)
+
+tom_credmpj_data[a:b,3]<- "MEI PJ"
+colnames(tom_credmpj_data)<-c("date","value","porte")
+```
+
+VisualizaçãO:
+
+```{r}
+ggplot()+
+  geom_line(data=tom_credmpj_data,aes(x=date,y=value), color = "dark green")+
+  labs(title = "Número de Tomadores de Crédito PJ por Porte", subtitle = "MEI PJ")+
+  xlab("Ano")+
+  ylab("Unidades (mil)")+
+  theme(axis.text.x = element_text(angle=90,vjust=0.5))+
+  scale_x_date(breaks = "years",date_labels = "%Y")+
+  theme(legend.position = "bottom",legend.title = element_blank())
+```
+
+Dados:
+
+```{r}
+series<-c(27310) ######NÚMERO DE OPERAÇÕES DE CRÉDITO PJ PORTE (unid. mil)
+
+op_credmpj<-NULL
+for(i in series){
+  assign(paste0("op_credmpj_",i),BETSget(i,data.frame=TRUE))
+  op_credmpj[[i]]<-get(paste0("op_credmpj_",i))
+} 
+
+op_credmpj_data<-do.call(rbind, op_credmpj)
+
+a<-1
+b<-nrow(op_credmpj_27310)
+
+op_credmpj_data[a:b,3]<- "MEI PJ"
+colnames(op_credmpj_data)<-c("date","value","porte")
+```
+
+Visualização:
+
+```{r}
+ggplot()+
+  geom_line(data=op_credmpj_data,aes(x=date,y=value),color="dark green")+
+  labs(title = "Número de Operações de Crédito PJ por Porte", subtitle = "MEI PJ")+
+  xlab("Ano")+
+  ylab("Unidades (milhão)")+
+  theme(axis.text.x = element_text(angle=90,vjust=0.5))+
+  scale_x_date(breaks = "years",date_labels = "%Y")+
+  theme(legend.position = "bottom",legend.title = element_blank())
+```
+
+Dados:
+
+```{r}
+#Gerando índice para deflacionar
+ipca<-BETSget(433,data.frame=TRUE,from = "2016-01-01", to = ultimotrianopassado)
+ipca[nrow(ipca),3]<-1
+
+i=nrow(ipca)-1
+while(i!=0){
+  ipca[i,3]<-ipca[i+1,3]*(1+ipca[i,2]/100)
+  i<-i-1
+}
+colnames(ipca)<-c("date", "value", "index")
+
+ipca_index_ano<-NULL
+aux<-((anopassado-2016)*4)+3
+for(i in 0:aux){
+  ipca_index_ano<-rbind(ipca_index_ano,ipca[1+(3*i),])
+}
+
+series<-c(27309) ######SALDO CRÉDITO PJ PORTE
+
+saldo_credmpj<-NULL
+for(i in series){
+  assign(paste0("saldo_credmpj_",i),BETSget(i,data.frame=TRUE))
+  saldo_credmpj[[i]]<-get(paste0("saldo_credmpj_",i))
+} 
+
+saldo_credmpj_data<-do.call(rbind, saldo_credmpj)
+
+a<-1
+b<-nrow(saldo_credmpj_27309)
+
+saldo_credmpj_data[a:b,3]<- "MEI PJ"
+colnames(saldo_credmpj_data)<-c("date","value","porte")
+saldo_credmpj_data["value"]<-saldo_credmpj_data["value"]/1000
+
+saldo_credmpj_data["real_value"]<-saldo_credmpj_data["value"]*ipca_index_ano["index"]
+```
+
+Visualização:
+
+```{r}
+ggplot()+
+  geom_line(data=saldo_credmpj_data,aes(x=date,y=real_value),color="dark green")+
+  labs(title = "Saldo Real de Crédito PJ por Porte",subtitle = paste0("MEI PJ Valores de Out/",anopassado))+
+  xlab("Ano")+
+  ylab("R$ (bilhão)")+
+  theme(axis.text.x = element_text(angle=90,vjust=0.5))+
+  scale_x_date(breaks = "years",date_labels = "%Y")+
+  theme(legend.position = "bottom",legend.title = element_blank())
+```
+
+Dados:
+
+```{r}
+series<-c(27311) ######VALOR MÉDIO OPERAÇÃO DE CRÉDITOS (em R$)
+
+valmed_credmpj<-NULL
+for(i in series){
+  assign(paste0("valmed_credmpj_",i),BETSget(i,data.frame=TRUE))
+  valmed_credmpj[[i]]<-get(paste0("valmed_credmpj_",i))
+} 
+
+valmed_credmpj_data <- valmed_credmpj_27311
+
+a<-1
+b<-nrow(valmed_credmpj_27311)
+
+valmed_credmpj_data[a:b,3]<- "MEI PJ"
+colnames(valmed_credmpj_data)<-c("date","value","porte")
+valmed_credmpj_data["value"]<-valmed_credmpj_data["value"]/1000
+
+valmed_credmpj_data["real_value"]<-valmed_credmpj_data["value"]*ipca_index_ano["index"]
+```
+
+Visualização:
+
+```{r}
+ggplot()+
+  geom_line(data=valmed_credmpj_data,aes(x=date,y=real_value),color="dark green")+
+  labs(title = "Valor Médio Operação de Crédito PJ por Porte",subtitle = paste0("MEI PJ Valores de Out/",anopassado))+
+  xlab("Ano")+
+  ylab("R$ (mil)")+
+  theme(axis.text.x = element_text(angle=90,vjust=0.5))+
+  scale_x_date(breaks = "years",date_labels = "%Y")+
+  theme(legend.position = "bottom",legend.title = element_blank())
+```
+
+### Saldo Real de Crédito por Região
+
+```{r, echo=FALSE}
+#Gerando índice para deflacionar
+ipca<-BETSget(433,data.frame=TRUE,from = "2016-01-01", to = ultimotrianopassado)
+ipca[nrow(ipca),3]<-1
+
+i=nrow(ipca)-1
+while(i!=0){
+  ipca[i,3]<-ipca[i+1,3]*(1+ipca[i,2]/100)
+  i<-i-1
+}
+colnames(ipca)<-c("date", "value", "index")
+
+ipca_index_ano<-NULL
+aux<-((anopassado-2016)*4)+3
+for(i in 0:aux){
+  ipca_index_ano<-rbind(ipca_index_ano,ipca[1+(3*i),])
+}
+
+ipca_index_ano2<-rbind(ipca_index_ano,ipca_index_ano,
+                       ipca_index_ano,ipca_index_ano,
+                       ipca_index_ano)
+
+#Download de Séries
+series<-c(27322,27323,27324,27325,27326)
+saldocredregmpj<-NULL
+for(i in series){
+  assign(paste0("saldocredregmpj_",i),BETSget(i,data.frame=TRUE))
+  saldocredregmpj[[i]]<-get(paste0("saldocredregmpj_",i))
+} 
+
+saldocredregmpj_data<-do.call(rbind, saldocredregmpj)
+
+a<-1
+b<-nrow(saldocredregmpj_27322)
+
+saldocredregmpj_data[a:b,3]<- "Norte"
+saldocredregmpj_data[(a+b*1):(b+b*1),3]<-"Nordeste"
+saldocredregmpj_data[(a+b*2):(b+b*2),3]<-"Centro-Oeste"
+saldocredregmpj_data[(a+b*3):(b+b*3),3]<-"Sudeste"
+saldocredregmpj_data[(a+b*4):(b+b*4),3]<-"Sul"
+
+saldocredregmpj_data[a:b,4]<- "MEI PJ"
+saldocredregmpj_data[(a+b*1):(b+b*1),4]<-"MEI PJ"
+saldocredregmpj_data[(a+b*2):(b+b*2),4]<-"MEI PJ"
+saldocredregmpj_data[(a+b*3):(b+b*3),4]<-"MEI PJ"
+saldocredregmpj_data[(a+b*4):(b+b*4),4]<-"MEI PJ"
+
+saldocredregmpj_data["value"]<-saldocredregmpj_data["value"]/1000
+saldocredregmpj_data["real_value"]<-saldocredregmpj_data["value"]*ipca_index_ano2["index"]
+colnames(saldocredregmpj_data) <- c("date", "value","regiao","porte","real_value")
+```
+
+```{r}
+ggplot()+
+  geom_line(data=saldocredregmpj_data,aes(x=date,y=real_value),color="dark green")+
+  ggtitle("Evolução Saldo Real de Crédito por Região",subtitle = paste0("MEI PJ Valores de Out/",anopassado))+
+  xlab("Ano")+
+  ylab("R$ (bilhão)")+
+  theme(axis.text.x = element_text(angle=90,vjust=0.5))+
+  scale_x_date(breaks = "years",date_labels = "%Y")+
+  theme(legend.position = "bottom",legend.title = element_blank(),legend.text=element_text(size=10))+
+  facet_grid(regiao ~ ., scales="free")
+```
+
+### Saldo Real de Crédito, Juros e Inadimplências por Modalidades Selecionadas
+
+```{r, echo=FALSE}
+#SALDO REAL DE CRÉDITO MEI na PJ (MODALIDADES SELECIONADAS EM AUXILIAR 3)
+
+#Gerando índice para deflacionar
+ipca<-BETSget(433,data.frame=TRUE,from = "2016-01-01", to = ultimotrianopassado)
+ipca[nrow(ipca),3]<-1
+
+i=nrow(ipca)-1
+while(i!=0){
+  ipca[i,3]<-ipca[i+1,3]*(1+ipca[i,2]/100)
+  i<-i-1
+}
+colnames(ipca)<-c("date", "value", "index") 
+
+ipca_index_ano<-NULL
+aux<-((anopassado-2016)*4)+3
+for(i in 0:aux){
+  ipca_index_ano<-rbind(ipca_index_ano,ipca[1+(3*i),])
+}
+
+ipca_index_ano2<-rbind(ipca_index_ano,ipca_index_ano,ipca_index_ano,ipca_index_ano,
+                       ipca_index_ano,ipca_index_ano,ipca_index_ano,ipca_index_ano,ipca_index_ano) #colocando 9 índices um abaixo do outro
+
+
+#Download de Séries
+series<-c(26639,26640,26646,26648,26651,26654,26662,26663,26676)
+saldomodmeipj<-NULL
+for(i in series){
+  assign(paste0("saldomodmeipj_",i),BETSget(i,data.frame=TRUE))
+  saldomodmeipj[[i]]<-get(paste0("saldomodmeipj_",i))
+} 
+
+saldomodmeipj_data<-do.call(rbind, saldomodmeipj)
+
+a<-1
+b<-nrow(saldomodmeipj_26639)
+
+saldomodmeipj_data[a:b,3]<-"Aquisição de Bens -\n Outros Bens"
+saldomodmeipj_data[(a+b*1):(b+b*1),3]<-"Aquisição de Bens -\n Veículos Automotores"
+saldomodmeipj_data[(a+b*2):(b+b*2),3]<-"Capital de Giro com Prazo\n de Vencimento até 365d"
+saldomodmeipj_data[(a+b*3):(b+b*3),3]<-"Capital de Giro com Prazo\n Superior a 365d"
+saldomodmeipj_data[(a+b*4):(b+b*4),3]<-"Cartão de Crédito -\n Compra à Vista e Parcelado Lojista" 
+saldomodmeipj_data[(a+b*5):(b+b*5),3]<- "Cheque\n Especial"
+saldomodmeipj_data[(a+b*6):(b+b*6),3]<-"Desconto de\n Cheques"
+saldomodmeipj_data[(a+b*7):(b+b*7),3]<-"Desconto de\n Duplicatas"
+saldomodmeipj_data[(a+b*8):(b+b*8),3]<-"Microcrédito"
+
+saldomodmeipj_data["value"]<-saldomodmeipj_data["value"]/1000
+saldomodmeipj_data["real_value"]<-saldomodmeipj_data["value"]*ipca_index_ano2["index"]
+colnames(saldomodmeipj_data) <- c("date", "value","modalidade","real_value")
+```
+
+```{r}
+ggplot()+
+  geom_line(data=saldomodmeipj_data,aes(x=date,y=real_value,color=modalidade))+
+  ggtitle("Evolução Saldo Real de Crédito por Modalidade",subtitle = paste0("MEI na PJ, Valores de Out/",anopassado))+
+  xlab("Ano")+
+  ylab("R$ (bilhão)")+
+  theme(axis.text.x = element_text(angle=90,vjust=0.5))+
+  scale_x_date(breaks = "years",date_labels = "%Y")+
+  theme(legend.position = "bottom",legend.title = element_blank(),legend.text=element_text(size=10))
+```
+
+```{r, echo=FALSE}
+#TAxas DE JUROS MEI na PJ (MODALIDADES SELECIONADAS EM AUXILIAR 3)
+
+series<-c(26885,26886,26891,26892,26896,26902,26903,26910)
+jurosmodmeipj<-NULL
+for(i in series){
+  assign(paste0("jurosmodmeipj_",i),BETSget(i,data.frame=TRUE))
+  jurosmodmeipj[[i]]<-get(paste0("jurosmodmeipj_",i))
+} 
+
+jurosmodmeipj_data<-do.call(rbind, jurosmodmeipj)
+
+a<-1
+b<-nrow(jurosmodmeipj_26885)
+
+jurosmodmeipj_data[a:b,3]<-"Aquisição de Bens -\n Outros Bens"
+jurosmodmeipj_data[(a+b*1):(b+b*1),3]<-"Aquisição de Bens -\n Veículos Automotores"
+jurosmodmeipj_data[(a+b*2):(b+b*2),3]<-"Capital de Giro com Prazo\n de Vencimento até 365d"
+jurosmodmeipj_data[(a+b*3):(b+b*3),3]<-"Capital de Giro com Prazo\n Superior a 365d"
+jurosmodmeipj_data[(a+b*4):(b+b*4),3]<- "Cheque\n Especial"
+jurosmodmeipj_data[(a+b*5):(b+b*5),3]<-"Desconto de\n Cheques"
+jurosmodmeipj_data[(a+b*6):(b+b*6),3]<-"Desconto de\n Duplicatas"
+jurosmodmeipj_data[(a+b*7):(b+b*7),3]<-"Microcrédito"
+
+colnames(jurosmodmeipj_data) <- c("date", "value","modalidade")
+```
+
+```{r}
+ggplot()+
+  geom_line(data=jurosmodmeipj_data,aes(x=date,y=value,color=modalidade))+
+  ggtitle("Evolução Juros por Modalidade",subtitle = "MEI na PJ")+
+  xlab("Ano")+
+  ylab("% a.a.")+
+  theme(axis.text.x = element_text(angle=90,vjust=0.5))+
+  scale_x_date(breaks = "years",date_labels = "%Y")+
+  theme(legend.position = "bottom",legend.title = element_blank(),legend.text=element_text(size=10))
+```
+
+```{r, echo=FALSE}
+#INADIMPLÊNCIA MEI na PJ (MODALIDADES SELECIONADAS EM AUXILIAR 3)
+
+series<-c(26810,26811,26816,26818,26822,27385,27386,27392)
+inadmodmeipj<-NULL
+for(i in series){
+  assign(paste0("inadmodmeipj_",i),BETSget(i,data.frame=TRUE))
+  inadmodmeipj[[i]]<-get(paste0("inadmodmeipj_",i))
+} 
+
+inadmodmeipj_data<-do.call(rbind, inadmodmeipj)
+
+a<-1
+b<-nrow(inadmodmeipj_26810)
+
+inadmodmeipj_data[a:b,3]<-"Aquisição de Bens -\n Outros Bens"
+inadmodmeipj_data[(a+b*1):(b+b*1),3]<-"Aquisição de Bens -\n Veículos Automotores"
+inadmodmeipj_data[(a+b*2):(b+b*2),3]<-"Capital de Giro com Prazo\n de Vencimento até 365d"
+inadmodmeipj_data[(a+b*3):(b+b*3),3]<-"Capital de Giro com Prazo\n Superior a 365d"
+inadmodmeipj_data[(a+b*4):(b+b*4),3]<- "Cheque\n Especial"
+inadmodmeipj_data[(a+b*5):(b+b*5),3]<-"Desconto de\n Cheques"
+inadmodmeipj_data[(a+b*6):(b+b*6),3]<-"Desconto de\n Duplicatas"
+inadmodmeipj_data[(a+b*7):(b+b*7),3]<-"Microcrédito"
+
+colnames(inadmodmeipj_data) <- c("date", "value","modalidade")
+```
+
+```{r}
+ggplot()+
+  geom_line(data=inadmodmeipj_data[1:(nrow(inadmodmeipj_26810)*4),],aes(x=date,y=value,color=modalidade))+
+  ggtitle("Evolução Inadimplência por Modalidade 1",subtitle = "MEI na PJ")+
+  xlab("Ano")+
+  ylab("%")+
+  theme(axis.text.x = element_text(angle=90,vjust=0.5))+
+  scale_x_date(breaks = "years",date_labels = "%Y")+
+  theme(legend.position = "bottom",legend.title = element_blank(),legend.text=element_text(size=10))
+
+ggplot()+
+  geom_line(data=inadmodmeipj_data[((nrow(inadmodmeipj_26810)*4)+1):nrow(inadmodmeipj_data),],aes(x=date,y=value,color=modalidade))+
+  ggtitle("Evolução Inadimplência por Modalidade 2",subtitle = "MEI na PJ")+
+  xlab("Ano")+
+  ylab("%")+
+  theme(axis.text.x = element_text(angle=90,vjust=0.5))+
+  scale_x_date(breaks = "years",date_labels = "%Y")+
+  theme(legend.position = "bottom",legend.title = element_blank(),legend.text=element_text(size=10))
+```
+

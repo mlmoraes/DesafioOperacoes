@@ -1,0 +1,889 @@
+---
+title: "Exploratória Crédito: Microempresa e Pequeno Porte"
+author: "Marcelo Moraes"
+date: "13/06/2019"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Este documento se refere à análise exploratória realizada com os principais dados relativos a modalidades de crédito. A fonte de todos os dados é o SGS/BACEN. Os primeiros códigos serão mostrados e, em seguida, os próximos ocultados por seguirem a mesma lógica. O código completo pode ser encontrado no arquivo "Análise Exploratória Geral.R".
+
+Primeiro, os pacotes pertinentes devem ser instalados e abertos para utilização. Além disso, 3 variáveis relevantes ao processo de deflacionamento são criadas.
+
+```{r,message=FALSE}
+require("BETS")
+require("ggplot2")
+
+anopassado<-as.numeric(format(Sys.Date(), "%Y"))-1
+anopassadodata<-paste0(anopassado,"-01-01")
+ultimotrianopassado<-paste0(anopassado,"-10-01")
+```
+
+
+#### Saldo Real de Crédito, Quantidade de Operações, Quantidade de Tomadores de Crédito e Valor Médio Real
+
+Dados:
+
+```{r}
+series<-c(25709,25710) ######NÚMERO DE TOMADORES DE CRÉDITO PJ PORTE (unid. mil)
+
+tom_cred<-NULL
+for(i in series){
+  assign(paste0("tom_cred_",i),BETSget(i,data.frame=TRUE))
+  tom_cred[[i]]<-get(paste0("tom_cred_",i))
+} 
+
+tom_cred_data<-do.call(rbind, tom_cred)
+
+a<-1
+b<-nrow(tom_cred_25709)
+
+tom_cred_data[a:b,3]<- "Microempresa"
+tom_cred_data[(a+b*1):(b+b*1),3]<-"Pequeno Porte"
+colnames(tom_cred_data)<-c("date","value","porte")
+tom_cred_data["value"]<-tom_cred_data["value"]/1000
+```
+
+Visualização:
+
+```{r}
+ggplot()+
+  geom_line(data=tom_cred_data,aes(x=date,y=value,color=porte))+
+  labs(title = "Número de Tomadores de Crédito PJ por Porte")+
+  xlab("Ano")+
+  ylab("Unidades (milhão)")+
+  theme(axis.text.x = element_text(angle=90,vjust=0.5))+
+  scale_x_date(breaks = "years",date_labels = "%Y")+
+  theme(legend.position = "bottom",legend.title = element_blank())
+```
+
+Dados:
+
+```{r}
+series<-c(25713,25714) ######NÚMERO DE OPERAÇÕES DE CRÉDITO PJ PORTE (unid. mil)
+
+op_cred<-NULL
+for(i in series){
+  assign(paste0("op_cred_",i),BETSget(i,data.frame=TRUE))
+  op_cred[[i]]<-get(paste0("op_cred_",i))
+} 
+
+op_cred_data<-do.call(rbind, op_cred)
+
+a<-1
+b<-nrow(op_cred_25713)
+
+op_cred_data[a:b,3]<- "Microempresa"
+op_cred_data[(a+b*1):(b+b*1),3]<-"Pequeno Porte"
+colnames(op_cred_data)<-c("date","value","porte")
+
+```
+
+Visualização:
+
+```{r}
+ggplot()+
+  geom_line(data=op_cred_data,aes(x=date,y=value,color=porte))+
+  labs(title = "Número de Operações de Crédito PJ por Porte")+
+  xlab("Ano")+
+  ylab("Unidades (mil)")+
+  theme(axis.text.x = element_text(angle=90,vjust=0.5))+
+  scale_x_date(breaks = "years",date_labels = "%Y")+
+  theme(legend.position = "bottom",legend.title = element_blank())
+```
+
+Dados:
+
+```{r}
+#Gerando índice para deflacionar
+ipca<-BETSget(433,data.frame=TRUE,from = "2012-01-01", to = ultimotrianopassado)
+ipca[nrow(ipca),3]<-1
+
+i=nrow(ipca)-1
+while(i!=0){
+  ipca[i,3]<-ipca[i+1,3]*(1+ipca[i,2]/100)
+  i<-i-1
+}
+colnames(ipca)<-c("date", "value", "index")
+
+ipca_index_ano<-NULL
+aux<-((anopassado-2012)*4)+3
+for(i in 0:aux){
+  ipca_index_ano<-rbind(ipca_index_ano,ipca[1+(3*i),])
+}
+
+ipca_index_ano2<-rbind(ipca_index_ano,ipca_index_ano) #colocando 2 índices um abaixo do outro
+
+series<-c(25711,25712) ######SALDO CRÉDITO PJ PORTE
+
+saldo_cred<-NULL
+for(i in series){
+  assign(paste0("saldo_cred_",i),BETSget(i,data.frame=TRUE))
+  saldo_cred[[i]]<-get(paste0("saldo_cred_",i))
+} 
+
+saldo_cred_data<-do.call(rbind, saldo_cred)
+
+a<-1
+b<-nrow(saldo_cred_25711)
+
+saldo_cred_data[a:b,3]<- "Microempresa"
+saldo_cred_data[(a+b*1):(b+b*1),3]<-"Pequeno Porte"
+colnames(saldo_cred_data)<-c("date","value","porte")
+saldo_cred_data["value"]<-saldo_cred_data["value"]/1000
+
+saldo_cred_data["real_value"]<-saldo_cred_data["value"]*ipca_index_ano2["index"]
+```
+
+Visualização:
+
+```{r}
+ggplot()+
+  geom_line(data=saldo_cred_data,aes(x=date,y=real_value,color=porte))+
+  labs(title = "Saldo Real de Crédito PJ por Porte",subtitle = paste0("Valores de Out/",anopassado))+
+  xlab("Ano")+
+  ylab("R$ (bilhão)")+
+  theme(axis.text.x = element_text(angle=90,vjust=0.5))+
+  scale_x_date(breaks = "years",date_labels = "%Y")+
+  theme(legend.position = "bottom",legend.title = element_blank())
+```
+
+Dados:
+
+```{r}
+series<-c(25715,25716) ######VALOR MÉDIO OPERAÇÃO DE CRÉDITOS (em R$)
+
+valmed_cred<-NULL
+for(i in series){
+  assign(paste0("valmed_cred_",i),BETSget(i,data.frame=TRUE))
+  valmed_cred[[i]]<-get(paste0("valmed_cred_",i))
+} 
+
+valmed_cred_data<-do.call(rbind, valmed_cred)
+
+a<-1
+b<-nrow(valmed_cred_25715)
+
+valmed_cred_data[a:b,3]<- "Microempresa"
+valmed_cred_data[(a+b*1):(b+b*1),3]<-"Pequeno Porte"
+colnames(valmed_cred_data)<-c("date","value","porte")
+valmed_cred_data["value"]<-valmed_cred_data["value"]/1000
+
+valmed_cred_data["real_value"]<-valmed_cred_data["value"]*ipca_index_ano2["index"]
+```
+
+Visualização:
+
+```{r}
+ggplot()+
+  geom_line(data=valmed_cred_data,aes(x=date,y=real_value,color=porte))+
+  labs(title = "Valor Médio Operação de Crédito PJ por Porte",subtitle = paste0("Valores de Out/",anopassado))+
+  xlab("Ano")+
+  ylab("R$ (mil)")+
+  theme(axis.text.x = element_text(angle=90,vjust=0.5))+
+  scale_x_date(breaks = "years",date_labels = "%Y")+
+  scale_y_continuous(breaks = seq(2.5, 12.5, by = 2.5), limits=c(2.5,12.5))+
+  theme(legend.position = "bottom",legend.title = element_blank())
+```
+
+### Saldo Real de Crédito por Porte e Faixa de Valor
+
+```{r, echo=FALSE}
+#Gerando índice para deflacionar
+ipca<-BETSget(433,data.frame=TRUE,from = "2012-01-01", to = ultimotrianopassado)
+ipca[nrow(ipca),3]<-1
+
+i=nrow(ipca)-1
+while(i!=0){
+  ipca[i,3]<-ipca[i+1,3]*(1+ipca[i,2]/100)
+  i<-i-1
+}
+colnames(ipca)<-c("date", "value", "index")
+
+ipca_index_ano<-NULL
+aux<-((anopassado-2012)*4)+3
+for(i in 0:aux){
+  ipca_index_ano<-rbind(ipca_index_ano,ipca[1+(3*i),])
+}
+
+ipca_index_ano2<-rbind(ipca_index_ano,ipca_index_ano,
+                       ipca_index_ano,ipca_index_ano,
+                       ipca_index_ano,ipca_index_ano,
+                       ipca_index_ano,ipca_index_ano,
+                       ipca_index_ano,ipca_index_ano,
+                       ipca_index_ano,ipca_index_ano) #colocando 12 índices um abaixo do outro
+
+#Download de Séries
+series<-seq(25717,25728)
+saldocredportfaixa<-NULL
+for(i in series){
+  assign(paste0("saldocredportfaixa_",i),BETSget(i,data.frame=TRUE))
+  saldocredportfaixa[[i]]<-get(paste0("saldocredportfaixa_",i))
+} 
+
+saldocredportfaixa_data<-do.call(rbind, saldocredportfaixa)
+
+a<-1
+b<-nrow(saldocredportfaixa_25717)
+
+saldocredportfaixa_data[a:b,3]<- "Até R$1k"
+saldocredportfaixa_data[(a+b*1):(b+b*1),3]<-"R$1k-R$5k"
+saldocredportfaixa_data[(a+b*2):(b+b*2),3]<-"R$5k-R$10k"
+saldocredportfaixa_data[(a+b*3):(b+b*3),3]<-"R$10k-R$50k"
+saldocredportfaixa_data[(a+b*4):(b+b*4),3]<-"R$50k-R$100k"
+saldocredportfaixa_data[(a+b*5):(b+b*5),3]<-"Mais de 100k"
+saldocredportfaixa_data[(a+b*6):(b+b*6),3]<- "Até R$1k"
+saldocredportfaixa_data[(a+b*7):(b+b*7),3]<-"R$1k-R$5k"
+saldocredportfaixa_data[(a+b*8):(b+b*8),3]<-"R$5k-R$10k"
+saldocredportfaixa_data[(a+b*9):(b+b*9),3]<-"R$10k-R$50k"
+saldocredportfaixa_data[(a+b*10):(b+b*10),3]<-"R$50k-R$100k"
+saldocredportfaixa_data[(a+b*11):(b+b*11),3]<-"Mais de 100k"
+
+saldocredportfaixa_data[a:b,4]<- "Microempresa"
+saldocredportfaixa_data[(a+b*1):(b+b*1),4]<-"Microempresa"
+saldocredportfaixa_data[(a+b*2):(b+b*2),4]<-"Microempresa"
+saldocredportfaixa_data[(a+b*3):(b+b*3),4]<-"Microempresa"
+saldocredportfaixa_data[(a+b*4):(b+b*4),4]<-"Microempresa"
+saldocredportfaixa_data[(a+b*5):(b+b*5),4]<-"Microempresa"
+saldocredportfaixa_data[(a+b*6):(b+b*6),4]<-"Pequeno Porte"
+saldocredportfaixa_data[(a+b*7):(b+b*7),4]<-"Pequeno Porte"
+saldocredportfaixa_data[(a+b*8):(b+b*8),4]<-"Pequeno Porte"
+saldocredportfaixa_data[(a+b*9):(b+b*9),4]<-"Pequeno Porte"
+saldocredportfaixa_data[(a+b*10):(b+b*10),4]<-"Pequeno Porte"
+saldocredportfaixa_data[(a+b*11):(b+b*11),4]<-"Pequeno Porte"
+
+saldocredportfaixa_data["value"]<-saldocredportfaixa_data["value"]/1000
+saldocredportfaixa_data["real_value"]<-saldocredportfaixa_data["value"]*ipca_index_ano2["index"]
+colnames(saldocredportfaixa_data) <- c("date", "value","faixa","porte","real_value")
+
+```
+
+```{r}
+ggplot()+
+  geom_line(data=saldocredportfaixa_data,aes(x=date,y=real_value,color=faixa))+
+  ggtitle("Evolução Saldo Real de Crédito por Porte e Faixa de Valor",subtitle = paste0("Valores de Out/",anopassado))+
+  xlab("Ano")+
+  ylab("R$ (bilhão)")+
+  theme(axis.text.x = element_text(angle=90,vjust=0.5))+
+  scale_x_date(breaks = "years",date_labels = "%Y")+
+  theme(legend.position = "bottom",legend.title = element_blank(),legend.text=element_text(size=10))+
+  facet_grid(porte ~ ., scales="free")
+```
+
+### Saldo Real de Crédito por Porte e Prazo
+
+```{r, echo=FALSE}
+#Gerando índice para deflacionar
+ipca<-BETSget(433,data.frame=TRUE,from = "2012-01-01", to = ultimotrianopassado)
+ipca[nrow(ipca),3]<-1
+
+i=nrow(ipca)-1
+while(i!=0){
+  ipca[i,3]<-ipca[i+1,3]*(1+ipca[i,2]/100)
+  i<-i-1
+}
+colnames(ipca)<-c("date", "value", "index")
+
+ipca_index_ano<-NULL
+aux<-((anopassado-2012)*4)+3
+for(i in 0:aux){
+  ipca_index_ano<-rbind(ipca_index_ano,ipca[1+(3*i),])
+}
+
+ipca_index_ano2<-rbind(ipca_index_ano,ipca_index_ano,
+                       ipca_index_ano,ipca_index_ano,
+                       ipca_index_ano,ipca_index_ano,
+                       ipca_index_ano,ipca_index_ano) #colocando 8 índices um abaixo do outro
+
+
+#Download de Séries
+series<-seq(25729,25736)
+saldocredportprazo<-NULL
+for(i in series){
+  assign(paste0("saldocredportprazo_",i),BETSget(i,data.frame=TRUE))
+  saldocredportprazo[[i]]<-get(paste0("saldocredportprazo_",i))
+} 
+
+saldocredportprazo_data<-do.call(rbind, saldocredportprazo)
+
+a<-1
+b<-nrow(saldocredportprazo_25729)
+
+saldocredportprazo_data[a:b,3]<- "Até 1 ano"
+saldocredportprazo_data[(a+b*1):(b+b*1),3]<-"1 ano - 2 anos"
+saldocredportprazo_data[(a+b*2):(b+b*2),3]<-"2 anos - 5 anos"
+saldocredportprazo_data[(a+b*3):(b+b*3),3]<-"Mais que 5 anos"
+saldocredportprazo_data[(a+b*4):(b+b*4),3]<-"Até 1 ano"
+saldocredportprazo_data[(a+b*5):(b+b*5),3]<-"1 ano - 2 anos"
+saldocredportprazo_data[(a+b*6):(b+b*6),3]<-"2 anos - 5 anos"
+saldocredportprazo_data[(a+b*7):(b+b*7),3]<-"Mais que 5 anos"
+
+saldocredportprazo_data[a:b,4]<- "Microempresa"
+saldocredportprazo_data[(a+b*1):(b+b*1),4]<-"Microempresa"
+saldocredportprazo_data[(a+b*2):(b+b*2),4]<-"Microempresa"
+saldocredportprazo_data[(a+b*3):(b+b*3),4]<-"Microempresa"
+saldocredportprazo_data[(a+b*4):(b+b*4),4]<-"Pequeno Porte"
+saldocredportprazo_data[(a+b*5):(b+b*5),4]<-"Pequeno Porte"
+saldocredportprazo_data[(a+b*6):(b+b*6),4]<-"Pequeno Porte"
+saldocredportprazo_data[(a+b*7):(b+b*7),4]<-"Pequeno Porte"
+
+saldocredportprazo_data["value"]<-saldocredportprazo_data["value"]/1000
+saldocredportprazo_data["real_value"]<-saldocredportprazo_data["value"]*ipca_index_ano2["index"]
+colnames(saldocredportprazo_data) <- c("date", "value","prazo","porte","real_value")
+```
+
+```{r}
+ggplot()+
+  geom_line(data=saldocredportprazo_data,aes(x=date,y=real_value,color=prazo))+
+  ggtitle("Evolução Saldo Real de Crédito por Porte e Prazo",subtitle = paste0("Valores de Out/",anopassado))+
+  xlab("Ano")+
+  ylab("R$ (bilhão)")+
+  theme(axis.text.x = element_text(angle=90,vjust=0.5))+
+  scale_x_date(breaks = "years",date_labels = "%Y")+
+  theme(legend.position = "bottom",legend.title = element_blank(),legend.text=element_text(size=10))+
+  facet_grid(porte ~ ., scales="free")
+```
+
+### Saldo Real de Crédito por Região
+
+```{r, echo=FALSE}
+ipca<-BETSget(433,data.frame=TRUE,from = "2012-01-01", to = ultimotrianopassado)
+ipca[nrow(ipca),3]<-1
+
+i=nrow(ipca)-1
+while(i!=0){
+  ipca[i,3]<-ipca[i+1,3]*(1+ipca[i,2]/100)
+  i<-i-1
+}
+colnames(ipca)<-c("date", "value", "index")
+
+ipca_index_ano<-NULL
+aux<-((anopassado-2012)*4)+3
+for(i in 0:aux){
+  ipca_index_ano<-rbind(ipca_index_ano,ipca[1+(3*i),])
+}
+
+ipca_index_ano2<-rbind(ipca_index_ano,ipca_index_ano,
+                       ipca_index_ano,ipca_index_ano,
+                       ipca_index_ano,ipca_index_ano,
+                       ipca_index_ano,ipca_index_ano,
+                       ipca_index_ano,ipca_index_ano) #colocando 12 índices um abaixo do outro
+
+#Download de Séries
+series<-seq(25737,25746)
+saldocredreg<-NULL
+for(i in series){
+  assign(paste0("saldocredreg_",i),BETSget(i,data.frame=TRUE))
+  saldocredreg[[i]]<-get(paste0("saldocredreg_",i))
+} 
+
+saldocredreg_data<-do.call(rbind, saldocredreg)
+
+a<-1
+b<-nrow(saldocredreg_25737)
+
+saldocredreg_data[a:b,3]<- "Norte"
+saldocredreg_data[(a+b*1):(b+b*1),3]<-"Nordeste"
+saldocredreg_data[(a+b*2):(b+b*2),3]<-"Centro-Oeste"
+saldocredreg_data[(a+b*3):(b+b*3),3]<-"Sudeste"
+saldocredreg_data[(a+b*4):(b+b*4),3]<-"Sul"
+saldocredreg_data[(a+b*5):(b+b*5),3]<-"Norte"
+saldocredreg_data[(a+b*6):(b+b*6),3]<-"Nordeste"
+saldocredreg_data[(a+b*7):(b+b*7),3]<-"Centro-Oeste"
+saldocredreg_data[(a+b*8):(b+b*8),3]<-"Sudeste"
+saldocredreg_data[(a+b*9):(b+b*9),3]<-"Sul"
+
+saldocredreg_data[a:b,4]<- "Microempresa"
+saldocredreg_data[(a+b*1):(b+b*1),4]<-"Microempresa"
+saldocredreg_data[(a+b*2):(b+b*2),4]<-"Microempresa"
+saldocredreg_data[(a+b*3):(b+b*3),4]<-"Microempresa"
+saldocredreg_data[(a+b*4):(b+b*4),4]<-"Microempresa"
+saldocredreg_data[(a+b*5):(b+b*5),4]<-"Pequeno Porte"
+saldocredreg_data[(a+b*6):(b+b*6),4]<-"Pequeno Porte"
+saldocredreg_data[(a+b*7):(b+b*7),4]<-"Pequeno Porte"
+saldocredreg_data[(a+b*8):(b+b*8),4]<-"Pequeno Porte"
+saldocredreg_data[(a+b*9):(b+b*9),4]<-"Pequeno Porte"
+
+saldocredreg_data["value"]<-saldocredreg_data["value"]/1000
+saldocredreg_data["real_value"]<-saldocredreg_data["value"]*ipca_index_ano2["index"]
+colnames(saldocredreg_data) <- c("date", "value","regiao","porte","real_value")
+```
+
+```{r}
+ggplot()+
+  geom_line(data=saldocredreg_data,aes(x=date,y=real_value),color="dark green")+
+  ggtitle("Evolução Saldo Real de Crédito por Região",subtitle = paste0("Valores de Out/",anopassado))+
+  xlab("Ano")+
+  ylab("R$ (bilhão)")+
+  theme(axis.text.x = element_text(angle=90,vjust=0.5))+
+  scale_x_date(breaks = "years",date_labels = "%Y")+
+  theme(legend.position = "bottom",legend.title = element_blank(),legend.text=element_text(size=10))+
+  facet_grid(regiao ~ porte, scales="free")
+```
+
+### Saldo Real de Crédito por Origem de Recursos
+
+```{r, echo=FALSE}
+#Gerando índice para deflacionar
+ipca<-BETSget(433,data.frame=TRUE,from = "2012-01-01", to = ultimotrianopassado)
+ipca[nrow(ipca),3]<-1
+
+i=nrow(ipca)-1
+while(i!=0){
+  ipca[i,3]<-ipca[i+1,3]*(1+ipca[i,2]/100)
+  i<-i-1
+}
+colnames(ipca)<-c("date", "value", "index")
+
+ipca_index_ano<-NULL
+aux<-((anopassado-2012)*4)+3
+for(i in 0:aux){
+  ipca_index_ano<-rbind(ipca_index_ano,ipca[1+(3*i),])
+}
+
+ipca_index_ano2<-rbind(ipca_index_ano,ipca_index_ano,
+                       ipca_index_ano,ipca_index_ano) #colocando 12 índices um abaixo do outro
+
+#Download de Séries
+series<-c(25768,25953,25787,25772)
+saldocreorigemrec<-NULL
+for(i in series){
+  assign(paste0("saldocreorigemrec_",i),BETSget(i,data.frame=TRUE))
+  saldocreorigemrec[[i]]<-get(paste0("saldocreorigemrec_",i))
+} 
+
+saldocreorigemrec_data<-do.call(rbind, saldocreorigemrec)
+
+a<-1
+b<-nrow(saldocreorigemrec_25768)
+
+saldocreorigemrec_data[a:b,3]<- "Livres"
+saldocreorigemrec_data[(a+b*1):(b+b*1),3]<-"Direcionados"
+saldocreorigemrec_data[(a+b*2):(b+b*2),3]<-"Livres"
+saldocreorigemrec_data[(a+b*3):(b+b*3),3]<-"Direcionados"
+
+saldocreorigemrec_data[a:b,4]<- "Microempresa"
+saldocreorigemrec_data[(a+b*1):(b+b*1),4]<-"Microempresa"
+saldocreorigemrec_data[(a+b*2):(b+b*2),4]<-"Pequeno Porte"
+saldocreorigemrec_data[(a+b*3):(b+b*3),4]<-"Pequeno Porte"
+
+saldocreorigemrec_data["value"]<-saldocreorigemrec_data["value"]/1000
+saldocreorigemrec_data["real_value"]<-saldocreorigemrec_data["value"]*ipca_index_ano2["index"]
+colnames(saldocreorigemrec_data) <- c("date", "value","origem","porte","real_value")
+```
+
+```{r}
+ggplot()+
+  geom_line(data=saldocreorigemrec_data,aes(x=date,y=real_value),color="dark green")+
+  ggtitle("Evolução Saldo Real de Crédito por Origem de Recurso",subtitle = paste0("Valores de Out/",anopassado))+
+  xlab("Ano")+
+  ylab("R$ (bilhão)")+
+  theme(axis.text.x = element_text(angle=90,vjust=0.5))+
+  scale_x_date(breaks = "years",date_labels = "%Y")+
+  theme(legend.position = "bottom",legend.title = element_blank(),legend.text=element_text(size=10))+
+  facet_grid(porte ~ origem, scales="free")
+```
+
+### Saldo Real de Crédito, Juros e Inadimplência por Modalidades Selecionadas
+
+```{r, echo=FALSE}
+#SALDO REAL DE CRÉDITO MICROEMPRESAS (MODALIDADES SELECIONADAS EM AUXILIAR 1)
+
+#Gerando índice para deflacionar
+ipca<-BETSget(433,data.frame=TRUE,from = "2012-01-01", to = ultimotrianopassado)
+ipca[nrow(ipca),3]<-1
+
+i=nrow(ipca)-1
+while(i!=0){
+  ipca[i,3]<-ipca[i+1,3]*(1+ipca[i,2]/100)
+  i<-i-1
+}
+colnames(ipca)<-c("date", "value", "index")
+
+ipca_index_ano<-NULL
+aux<-((anopassado-2012)*4)+3
+for(i in 0:aux){
+  ipca_index_ano<-rbind(ipca_index_ano,ipca[1+(3*i),])
+}
+
+ipca_index_ano2<-rbind(ipca_index_ano,ipca_index_ano,ipca_index_ano,ipca_index_ano,
+                       ipca_index_ano,ipca_index_ano,ipca_index_ano,ipca_index_ano) #colocando 8 índices um abaixo do outro
+
+#Download de Séries
+series<-c(25795,25796,25809,25825,25826,25829,25830,25831)
+saldomodmicro1<-NULL
+for(i in series){
+  assign(paste0("saldomodmicro1_",i),BETSget(i,data.frame=TRUE))
+  saldomodmicro1[[i]]<-get(paste0("saldomodmicro1_",i))
+} 
+
+saldomodmicro1_data<-do.call(rbind, saldomodmicro1)
+
+a<-1
+b<-nrow(saldomodmicro1_25795)
+
+saldomodmicro1_data[a:b,3]<-"Aquisição de Bens -\n Outros Bens"
+saldomodmicro1_data[(a+b*1):(b+b*1),3]<-"Aquisição de Bens\n - Veículos Automotores"
+saldomodmicro1_data[(a+b*2):(b+b*2),3]<-"Cartão de Crédito\n - Compra à Vista e Parcelado Lojista"
+saldomodmicro1_data[(a+b*3):(b+b*3),3]<-"Financiamento de Infraestrutura\n e Desenvolvimento"
+saldomodmicro1_data[(a+b*4):(b+b*4),3]<-"Financiamento de\n Projeto"
+saldomodmicro1_data[(a+b*5):(b+b*5),3]<-"Financiamento Habitacional\n - Carteira Hipotecária"
+saldomodmicro1_data[(a+b*6):(b+b*6),3]<-"Financiamento Habitalcional\n - SFH"
+saldomodmicro1_data[(a+b*7):(b+b*7),3]<-"Financiamento Imobiliário - Empreendimento,\n Exceto Habitacional"
+
+
+saldomodmicro1_data["value"]<-saldomodmicro1_data["value"]/1000
+saldomodmicro1_data["real_value"]<-saldomodmicro1_data["value"]*ipca_index_ano2["index"]
+colnames(saldomodmicro1_data) <- c("date", "value","modalidade","real_value")
+```
+
+```{r}
+ggplot()+
+  geom_line(data=saldomodmicro1_data[1:(nrow(saldomodmicro1_data)/2),],aes(x=date,y=real_value,color=modalidade))+
+  ggtitle("Evolução Saldo Real de Crédito por Modalidade 1",subtitle = paste0("Microempresa, Valores de Out/",anopassado))+
+  xlab("Ano")+
+  ylab("R$ (bilhão)")+
+  theme(axis.text.x = element_text(angle=90,vjust=0.5))+
+  scale_x_date(breaks = "years",date_labels = "%Y")+
+  theme(legend.position = "bottom",legend.title = element_blank(),legend.text=element_text(size=10))
+ 
+ggplot()+
+  geom_line(data=saldomodmicro1_data[(nrow(saldomodmicro1_data)/2+1):(nrow(saldomodmicro1_data)),],aes(x=date,y=real_value,color=modalidade))+
+  ggtitle("Evolução Saldo Real de Crédito por Modalidade 2",subtitle = paste0("Microempresa, Valores de Out/",anopassado))+
+  xlab("Ano")+
+  ylab("R$ (bilhão)")+
+  theme(axis.text.x = element_text(angle=90,vjust=0.5))+
+  scale_x_date(breaks = "years",date_labels = "%Y")+
+  theme(legend.position = "bottom",legend.title = element_blank(),legend.text=element_text(size=10))
+```
+
+```{r, echo=FALSE}
+#Gerando índice para deflacionar
+ipca<-BETSget(433,data.frame=TRUE,from = "2014-01-01", to = ultimotrianopassado)
+ipca[nrow(ipca),3]<-1
+
+i=nrow(ipca)-1
+while(i!=0){
+  ipca[i,3]<-ipca[i+1,3]*(1+ipca[i,2]/100)
+  i<-i-1
+}
+colnames(ipca)<-c("date", "value", "index")
+
+ipca_index_ano<-NULL
+aux<-((anopassado-2014)*4)+3
+for(i in 0:aux){
+  ipca_index_ano<-rbind(ipca_index_ano,ipca[1+(3*i),])
+}
+
+ipca_index_ano2<-rbind(ipca_index_ano,ipca_index_ano,ipca_index_ano,ipca_index_ano) #colocando 4 índices um abaixo do outro
+
+series<-c(25804,25806,25812,25816)
+saldomodmicro2<-NULL
+for(i in series){
+  assign(paste0("saldomodmicro2_",i),BETSget(i,data.frame=TRUE))
+  saldomodmicro2[[i]]<-get(paste0("saldomodmicro2_",i))
+} 
+
+saldomodmicro2_data<-do.call(rbind, saldomodmicro2)
+
+a<-1
+b<-nrow(saldomodmicro2_25804)
+
+saldomodmicro2_data[a:b,3]<- "Capital de giro com prazo\nde vencimento até 365 dias"
+saldomodmicro2_data[(a+b*1):(b+b*1),3]<-"Capital de giro com prazo\nde vencimento superior a 365 dias"
+saldomodmicro2_data[(a+b*2):(b+b*2),3]<-"Cheque Especial"
+saldomodmicro2_data[(a+b*3):(b+b*3),3]<-"Conta Garantida"
+
+saldomodmicro2_data["value"]<-saldomodmicro2_data["value"]/1000
+saldomodmicro2_data["real_value"]<-saldomodmicro2_data["value"]*ipca_index_ano2["index"]
+colnames(saldomodmicro2_data) <- c("date", "value","modalidade","real_value")
+```
+
+```{r}
+ggplot()+
+  geom_line(data=saldomodmicro2_data,aes(x=date,y=real_value,color=modalidade))+
+  ggtitle("Evolução Saldo Real de Crédito por Modalidade 3",subtitle = paste0("Microempresa, Valores de Out/",anopassado))+
+  xlab("Ano")+
+  ylab("R$ (bilhão)")+
+  theme(axis.text.x = element_text(angle=90,vjust=0.5))+
+  scale_x_date(breaks = "years",date_labels = "%Y")+
+  theme(legend.position = "bottom",legend.title = element_blank(),legend.text=element_text(size=10))
+```
+
+```{r, echo=FALSE}
+#TAxas DE JUROS MICROEMPRESAS (MODALIDADES SELECIONADAS EM AUXILIAR 1)
+
+series<-c(26501,26502,27261,27263,27265)
+jurosmodmicro<-NULL
+for(i in series){
+  assign(paste0("jurosmodmicro_",i),BETSget(i,data.frame=TRUE))
+  jurosmodmicro[[i]]<-get(paste0("jurosmodmicro_",i))
+} 
+
+jurosmodmicro_data<-do.call(rbind, jurosmodmicro)
+
+a<-1
+b<-nrow(jurosmodmicro_27261)
+c<-nrow(jurosmodmicro_27263)
+d<-nrow(jurosmodmicro_27265)
+
+nrow(jurosmodmicro_data)
+
+jurosmodmicro_data[a:b,3]<-"Aquisição de Bens -\n Outros Bens"
+jurosmodmicro_data[(a+b*1):(b+b*1),3]<-"Aquisição de Bens -\n Veículos Automotores"
+jurosmodmicro_data[(a+b*2):(b+b*2),3]<-"Financiamento\n de Projeto"
+jurosmodmicro_data[(a+b*2+c):(b+b*2+c),3]<-"Financiamento Habitacional -\n Carteira Hipotecária"
+jurosmodmicro_data[(a+b*2+c+d):(b+b*2+c+d),3]<-"Financiamento Imobiliário -\n Empreendimento, Exceto Habitacional"
+
+colnames(jurosmodmicro_data) <- c("date", "value","modalidade")
+
+```
+
+```{r}
+ggplot()+
+  geom_line(data=jurosmodmicro_data,aes(x=date,y=value,color=modalidade))+
+  ggtitle("Evolução Juros por Modalidade 1",subtitle = "Microempresa")+
+  xlab("Ano")+
+  ylab("% a.a.")+
+  theme(axis.text.x = element_text(angle=90,vjust=0.5))+
+  scale_x_date(breaks = "years",date_labels = "%Y")+
+  theme(legend.position = "bottom",legend.title = element_blank(),legend.text=element_text(size=10))
+```
+
+```{r, echo=FALSE}
+series<-c(26510,26511,27248,27251)
+jurosmodmicro2<-NULL
+for(i in series){
+  assign(paste0("jurosmodmicro2_",i),BETSget(i,data.frame=TRUE))
+  jurosmodmicro2[[i]]<-get(paste0("jurosmodmicro2_",i))
+} 
+
+jurosmodmicro2_data<-do.call(rbind, jurosmodmicro2)
+
+a<-1
+b<-nrow(jurosmodmicro2_26510)
+
+jurosmodmicro2_data[a:b,3]<- "Capital de giro com prazo\n de vencimento até 365 dias"
+jurosmodmicro2_data[(a+b*1):(b+b*1),3]<-"Capital de giro com prazo\n de vencimento superior a 365 dias"
+jurosmodmicro2_data[(a+b*2):(b+b*2),3]<-"Cheque\n Especial"
+jurosmodmicro2_data[(a+b*3):(b+b*3),3]<-"Conta\n Garantida"
+
+colnames(jurosmodmicro2_data) <- c("date", "value","modalidade")
+```
+
+```{r}
+ggplot()+
+  geom_line(data=jurosmodmicro2_data,aes(x=date,y=value,color=modalidade))+
+  ggtitle("Evolução Juros por Modalidade 2",subtitle = "Microempresa")+
+  xlab("Ano")+
+  ylab("% a.a.")+
+  theme(axis.text.x = element_text(angle=90,vjust=0.5))+
+  scale_x_date(breaks = "years",date_labels = "%Y")+
+  theme(legend.position = "bottom",legend.title = element_blank(),legend.text=element_text(size=10))
+```
+
+```{r, echo=FALSE}
+#TAXA DE INADIMPLÊNCIA MICROEMPRESAS (MODALIDADES SELECIONADAS EM AUXILIAR 1)
+
+series<-c(26327,26328,26340,26356,26359,26361)
+inadmodmicro<-NULL
+for(i in series){
+  assign(paste0("inadmodmicro_",i),BETSget(i,data.frame=TRUE))
+  inadmodmicro[[i]]<-get(paste0("inadmodmicro_",i))
+} 
+
+inadmodmicro_data<-do.call(rbind, inadmodmicro)
+
+a<-1
+b<-nrow(inadmodmicro_26327)
+
+inadmodmicro_data[a:b,3]<-"Aquisição de Bens -\n Outros Bens"
+inadmodmicro_data[(a+b*1):(b+b*1),3]<-"Aquisição de Bens -\n Veículos Automotores"
+inadmodmicro_data[(a+b*2):(b+b*2),3]<-"Cartão de Crédito -\n Compra à Vista e Parcelado Lojista"
+inadmodmicro_data[(a+b*3):(b+b*3),3]<-"Financiamento de\n Projeto"
+inadmodmicro_data[(a+b*4):(b+b*4),3]<-"Financiamento Habitacional -\n Carteira Hipotecária"
+inadmodmicro_data[(a+b*5):(b+b*5),3]<-"Financiamento Imobiliário -\n Empreendimento, Exceto Habitacional"
+
+colnames(inadmodmicro_data) <- c("date", "value","modalidade")
+```
+
+```{r}
+ggplot()+
+  geom_line(data=inadmodmicro_data[1:(nrow(inadmodmicro_data)/2),],aes(x=date,y=value,color=modalidade))+
+  ggtitle("Evolução Inadimplência por Modalidade 1",subtitle = "Microempresa")+
+  xlab("Ano")+
+  ylab("%")+
+  theme(axis.text.x = element_text(angle=90,vjust=0.5))+
+  scale_x_date(breaks = "years",date_labels = "%Y")+
+  theme(legend.position = "bottom",legend.title = element_blank(),legend.text=element_text(size=10))
+
+ggplot()+
+  geom_line(data=inadmodmicro_data[(nrow(inadmodmicro_data)/2+1):(nrow(inadmodmicro_data)),],aes(x=date,y=value,color=modalidade))+
+  ggtitle("Evolução Inadimplência por Modalidade 2",subtitle = "Microempresa")+
+  xlab("Ano")+
+  ylab("%")+
+  theme(axis.text.x = element_text(angle=90,vjust=0.5))+
+  scale_x_date(breaks = "years",date_labels = "%Y")+
+  theme(legend.position = "bottom",legend.title = element_blank(),legend.text=element_text(size=10))
+```
+
+```{r, echo=FALSE}
+series<-c(26335,26337,26343,26347)
+inadmodmicro2<-NULL
+for(i in series){
+  assign(paste0("inadmodmicro2_",i),BETSget(i,data.frame=TRUE))
+  inadmodmicro2[[i]]<-get(paste0("inadmodmicro2_",i))
+} 
+
+inadmodmicro2_data<-do.call(rbind, inadmodmicro2)
+
+a<-1
+b<-nrow(inadmodmicro2_26335)
+
+inadmodmicro2_data[a:b,3]<- "Capital de giro com prazo\n de vencimento até 365 dias"
+inadmodmicro2_data[(a+b*1):(b+b*1),3]<-"Capital de giro com prazo\n de vencimento superior a 365 dias"
+inadmodmicro2_data[(a+b*2):(b+b*2),3]<-"Cheque\n Especial"
+inadmodmicro2_data[(a+b*3):(b+b*3),3]<-"Conta\n Garantida"
+
+colnames(inadmodmicro2_data) <- c("date", "value","modalidade")
+```
+
+```{r}
+ggplot()+
+  geom_line(data=inadmodmicro2_data,aes(x=date,y=value,color=modalidade))+
+  ggtitle("Evolução Inadimplência por Modalidade 3",subtitle = "Microempresa")+
+  xlab("Ano")+
+  ylab("%")+
+  theme(axis.text.x = element_text(angle=90,vjust=0.5))+
+  scale_x_date(breaks = "years",date_labels = "%Y")+
+  theme(legend.position = "bottom",legend.title = element_blank(),legend.text=element_text(size=10))
+```
+
+```{r, echo=FALSE}
+#SALDO REAL DE CRÉDITO PEQUENO PORTE (MODALIDADES SELECIONADAS EM AUXILIAR 2)
+
+#Gerando índice para deflacionar
+ipca<-BETSget(433,data.frame=TRUE,from = "2012-01-01", to = ultimotrianopassado)
+ipca[nrow(ipca),3]<-1
+
+i=nrow(ipca)-1
+while(i!=0){
+  ipca[i,3]<-ipca[i+1,3]*(1+ipca[i,2]/100)
+  i<-i-1
+}
+colnames(ipca)<-c("date", "value", "index")
+
+ipca_index_ano<-NULL
+aux<-((anopassado-2012)*4)+3
+for(i in 0:aux){
+  ipca_index_ano<-rbind(ipca_index_ano,ipca[1+(3*i),])
+}
+
+ipca_index_ano2<-rbind(ipca_index_ano,ipca_index_ano) #colocando 2 índices um abaixo do outro
+
+#Download de Séries
+series<-c(25850,25880)
+
+saldomodpp1<-NULL
+for(i in series){
+  assign(paste0("saldomodpp1_",i),BETSget(i,data.frame=TRUE))
+  saldomodpp1[[i]]<-get(paste0("saldomodpp1_",i))
+} 
+
+saldomodpp1_data<-do.call(rbind, saldomodpp1)
+
+a<-1
+b<-nrow(saldomodpp1_25850)
+
+saldomodpp1_data[a:b,3]<-"Aquisição de Bens - Veículos Automotores"
+saldomodpp1_data[(a+b*1):(b+b*1),3]<-"Financiamento de Projeto"
+
+saldomodpp1_data["value"]<-saldomodpp1_data["value"]/1000
+saldomodpp1_data["real_value"]<-saldomodpp1_data["value"]*ipca_index_ano2["index"]
+colnames(saldomodpp1_data) <- c("date", "value","modalidade","real_value")
+```
+
+```{r}
+ggplot()+
+  geom_line(data=saldomodpp1_data,aes(x=date,y=real_value,color=modalidade))+
+  ggtitle("Evolução Saldo Real de Crédito por Modalidade 1",subtitle = paste0("Pequeno Porte, Valores de Out/",anopassado))+
+  xlab("Ano")+
+  ylab("R$ (bilhão)")+
+  theme(axis.text.x = element_text(angle=90,vjust=0.5))+
+  scale_x_date(breaks = "years",date_labels = "%Y")+
+  theme(legend.position = "bottom",legend.title = element_blank(),legend.text=element_text(size=10))
+```
+
+
+```{r, echo=FALSE}
+#TAxas DE JUROS PEQUENO PORTE (MODALIDADES SELECIONADAS EM AUXILIAR 2)
+
+series<-c(26538,27215)
+jurosmodpp<-NULL
+for(i in series){
+  assign(paste0("jurosmodpp_",i),BETSget(i,data.frame=TRUE))
+  jurosmodpp[[i]]<-get(paste0("jurosmodpp_",i))
+} 
+
+jurosmodpp_data<-do.call(rbind, jurosmodpp)
+
+a<-1
+b<-nrow(jurosmodmicro_27261)
+
+jurosmodpp_data[a:b,3]<-"Aquisição de Bens - Veículos Automotores"
+jurosmodpp_data[(a+b*1):(b+b*1),3]<-"Financiamento de Projeto"
+
+colnames(jurosmodpp_data) <- c("date", "value","modalidade")
+```
+
+```{r}
+ggplot()+
+  geom_line(data=jurosmodpp_data,aes(x=date,y=value,color=modalidade))+
+  ggtitle("Evolução Juros por Modalidade 1",subtitle = "Pequeno Porte")+
+  xlab("Ano")+
+  ylab("% a.a.")+
+  theme(axis.text.x = element_text(angle=90,vjust=0.5))+
+  scale_x_date(breaks = "years",date_labels = "%Y")+
+  theme(legend.position = "bottom",legend.title = element_blank(),legend.text=element_text(size=10))
+```
+
+```{r, echo=FALSE}
+#TAXA DE INADIMPLÊNCIA PEQUENO PORTE (MODALIDADES SELECIONADAS EM AUXILIAR 2)
+
+series<-c(26215)
+inadmodpp<-NULL
+for(i in series){
+  assign(paste0("inadmodpp_",i),BETSget(i,data.frame=TRUE))
+  inadmodpp[[i]]<-get(paste0("inadmodpp_",i))
+} 
+
+inadmodpp_data<-do.call(rbind, inadmodpp)
+
+a<-1
+b<-nrow(inadmodpp_26215)
+
+inadmodpp_data[a:b,3]<-"Aquisição de Bens - Veículos Automotores"
+
+colnames(inadmodpp_data) <- c("date", "value","modalidade")
+```
+
+```{r}
+ggplot()+
+  geom_line(data=inadmodpp_data,aes(x=date,y=value,color=modalidade))+
+  ggtitle("Evolução Inadimplência por Modalidade",subtitle = "Pequeno Porte")+
+  xlab("Ano")+
+  ylab("%")+
+  theme(axis.text.x = element_text(angle=90,vjust=0.5))+
+  scale_x_date(breaks = "years",date_labels = "%Y")+
+  theme(legend.position = "bottom",legend.title = element_blank(),legend.text=element_text(size=10))
+```
+
+
+
