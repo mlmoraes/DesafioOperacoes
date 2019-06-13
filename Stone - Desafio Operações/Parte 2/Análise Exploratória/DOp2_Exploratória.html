@@ -1652,36 +1652,15 @@ $(document).ready(function () {
 </div>
 
 
-<p>Esse documento contém a análise exploratória referente aos dados de Inclusão Financeira contidas no Sistema de Gerenciamento de Séries (SGS) do Banco Central do Brasil. O foco é em Instituições Emissoras de Moeda Eletrônica.</p>
+<p>Esse documento contém a análise exploratória referente aos dados de Inclusão Financeira contidos no Sistema de Gerenciamento de Séries (SGS) do Banco Central do Brasil. O foco é em Instituições Emissoras de Moeda Eletrônica.</p>
 <p>Primeiro, os pacotes pertinentes devem ser instalados e abertos para utilização. Além disso, 3 variáveis relevantes ao processo de deflacionamento são criadas.</p>
-<pre class="r"><code>require(&quot;BETS&quot;)</code></pre>
-<pre><code>## Loading required package: BETS</code></pre>
-<pre><code>## Registered S3 methods overwritten by &#39;ggplot2&#39;:
-##   method         from 
-##   [.quosures     rlang
-##   c.quosures     rlang
-##   print.quosures rlang</code></pre>
-<pre><code>## Registered S3 method overwritten by &#39;xts&#39;:
-##   method     from
-##   as.zoo.xts zoo</code></pre>
-<pre><code>## Registered S3 method overwritten by &#39;quantmod&#39;:
-##   method            from
-##   as.zoo.data.frame zoo</code></pre>
-<pre><code>## Registered S3 methods overwritten by &#39;forecast&#39;:
-##   method             from    
-##   fitted.fracdiff    fracdiff
-##   residuals.fracdiff fracdiff</code></pre>
-<pre><code>## 
-## Attaching package: &#39;BETS&#39;</code></pre>
-<pre><code>## The following object is masked from &#39;package:stats&#39;:
-## 
-##     predict</code></pre>
-<pre class="r"><code>require(&quot;ggplot2&quot;)</code></pre>
-<pre><code>## Loading required package: ggplot2</code></pre>
-<pre class="r"><code>anopassado&lt;-as.numeric(format(Sys.Date(), &quot;%Y&quot;))-1
+<pre class="r"><code>require(&quot;BETS&quot;)
+require(&quot;ggplot2&quot;)
+
+anopassado&lt;-as.numeric(format(Sys.Date(), &quot;%Y&quot;))-1
 anopassadodata&lt;-paste0(anopassado,&quot;-01-01&quot;)
 ultimotrianopassado&lt;-paste0(anopassado,&quot;-10-01&quot;)</code></pre>
-<p>O documento segue a metodologia de realizar download das séries relevantes com a função BETSget(), criar a base de dados quando relevante e, em seguida, realizar a visualização com a função ggplot(). Saldos, por representarem dinheiro, cujo valor varia com o tempo, serão deflacionados utilizando o IPCA, de modo que as visualizações sejam de saldos reais. Os códigos serão mostrados quando aparecerem pela primeira vez da forma utilizada e, nas próximas, serão omitidos. Entretanto, o código completo pode ser analisado através do arquivo “Análise Exploratória.R”.</p>
+<p>O documento segue a metodologia de realizar download das séries relevantes com a função BETSget(), criar a base de dados quando relevante e, em seguida, realizar a visualização com a função ggplot(). Saldos, por representarem dinheiro, cujo valor varia com o tempo, serão deflacionados utilizando o IPCA, de modo que as visualizações sejam de saldos reais. Os códigos serão mostrados quando aparecerem pela primeira vez da forma utilizada e, nas próximas, serão omitidos. Entretanto, o código completo pode ser analisado através do arquivo “Análise Exploratória Geral.R”.</p>
 <div id="pontos-de-atendimento-brasil" class="section level3">
 <h3>Pontos de Atendimento: Brasil</h3>
 <p>Download das séries e criação da base de dados:</p>

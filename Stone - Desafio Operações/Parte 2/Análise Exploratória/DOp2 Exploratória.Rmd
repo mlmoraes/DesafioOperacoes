@@ -13,7 +13,7 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-Esse documento contém a análise exploratória referente aos dados de Inclusão Financeira contidas no Sistema de Gerenciamento de Séries (SGS) do Banco Central do Brasil. O foco é em Instituições Emissoras de Moeda Eletrônica.
+Esse documento contém a análise exploratória referente aos dados de Inclusão Financeira contidos no Sistema de Gerenciamento de Séries (SGS) do Banco Central do Brasil. O foco é em Instituições Emissoras de Moeda Eletrônica.
 
 Primeiro, os pacotes pertinentes devem ser instalados e abertos para utilização. Além disso, 3 variáveis relevantes ao processo de deflacionamento são criadas.
 ```{r,message=FALSE}
@@ -25,7 +25,7 @@ anopassadodata<-paste0(anopassado,"-01-01")
 ultimotrianopassado<-paste0(anopassado,"-10-01")
 ```
 
-O documento segue a metodologia de realizar download das séries relevantes com a função BETSget(), criar a base de dados quando relevante e, em seguida, realizar a visualização com a função ggplot(). Saldos, por representarem dinheiro, cujo valor varia com o tempo, serão deflacionados utilizando o IPCA, de modo que as visualizações sejam de saldos reais. Os códigos serão mostrados quando aparecerem pela primeira vez da forma utilizada e, nas próximas, serão omitidos. Entretanto, o código completo pode ser analisado através do arquivo "Análise Exploratória.R".
+O documento segue a metodologia de realizar download das séries relevantes com a função BETSget(), criar a base de dados quando relevante e, em seguida, realizar a visualização com a função ggplot(). Saldos, por representarem dinheiro, cujo valor varia com o tempo, serão deflacionados utilizando o IPCA, de modo que as visualizações sejam de saldos reais. Os códigos serão mostrados quando aparecerem pela primeira vez da forma utilizada e, nas próximas, serão omitidos. Entretanto, o código completo pode ser analisado através do arquivo "Análise Exploratória Geral.R".
 
 ### Pontos de Atendimento: Brasil
 

@@ -15,20 +15,20 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ### 1. Interpolação
 
-Inicialmente, vale discutir um aspecto central deste análise: a quantidade de dados.
+Inicialmente, vale discutir um aspecto central desta análise: a quantidade de dados.
 Os dados utilizados, advindos do SGS/BACEN, muitas vezes, possuem periodicidade anual e começaram a ser computados pela instituição na metade ou final dos anos 2000.
 
 Assim, existe uma quantidade pequena de dados para que se possa realizar a maioria das modelagens matemáticas pertinentes. Problemas como overfitting, não significância estatística, entre outros ocorrem em casos como esse. Uma solução seria utilizar o modelo de previsão mais simples: média móvel.
 
-Entretanto, escolhi realizar uma interpolação linear com os dados de modo a criar um dataset maior, passando de anual para trimestral. O primeiro dado representará o dado do primeiro trimestre do primeiro ano e o último dado representará o dado do último trimestre do último ano. Com isso, a maioria dos modelos pode ser aplicada.
+Entretanto, escolhi realizar uma interpolação linear com os dados de modo a criar um dataset maior, passando de anual para trimestral. O primeiro dado representará o dado do primeiro trimestre do primeiro ano e o último dado representará o dado do último trimestre do último ano. Com isso, alguns dos modelos podem ser melhor aplicados.
 
 Cabe ressaltar, assim, que esta análise parte da premissa de que o erro de previsão gerado pela interpolação é menor do que o gerado pela utilização do modelo de média móvel. Essa hipótese é suficientemente fraca para ser adotada sem problemas.
 
 ### 2. Estrutura
 
-A análise será estruturada em 4 partes: caracterização das séries, modelagem, previsão e escolha do melhor modelo via Mean Squared Error (MSE). Os resultados será agrupados ao final. Previsões foram feitas até o final de 2020. No decorrer do documento, utilizarei testes econométricos e modelagens que serão explicados ao final do documento.
+A análise será estruturada em 4 partes: caracterização das séries, modelagem, previsão e escolha do melhor modelo via Mean Squared Error (MSE). Os resultados serão agrupados ao final. Previsões foram feitas até o final de 2020. No decorrer do documento, utilizarei testes econométricos e modelagens que serão explicitados ao final do documento.
 
-As 5 análises escolhidas foram baseadas na análise exploratória contida no documento "DOp2 Exploratória". Por fim, destaco que as visualizações contém os níveis de confiança de 80% (azul escuro) e 95% (azul claro) e os dados ajustados em vermelho.
+As 5 análises escolhidas foram baseadas na análise exploratória contida no documento "DOp2 Exploratória. rmd". Por fim, destaco que as visualizações contém os níveis de confiança de 80% (azul escuro) e 95% (azul claro) e os dados ajustados em vermelho.
 
 Pacotes relevantes:
 
