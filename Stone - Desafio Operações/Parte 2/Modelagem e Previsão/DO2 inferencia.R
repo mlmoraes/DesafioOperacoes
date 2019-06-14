@@ -6,6 +6,7 @@ require(astsa)
 require(MLmetrics)
 require(forecast)
 require(rugarch)
+require(BETS)
 
 #####Boleto: Canal Não Presencial#####
 
