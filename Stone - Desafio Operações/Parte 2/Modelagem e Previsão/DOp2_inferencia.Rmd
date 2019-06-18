@@ -553,7 +553,7 @@ menorMSE == MSE(for6$fitted,transf) #TBATS
 
 ### 8. Resultados Parciais?
 
-As **transações por boleto em canal não presencial são melhor modeladas por modelagem ARIMA, ao passo que a quantidade de POSs e transações por instrumento (cartão de débito, crédito e transferências) foram melhor modeladas por Neural network autoregression**. Entretanto, foram considerados, até agora, modelos que não consideram a heterocedasticidade que foi verificada nas séries.
+As **transações por boleto em canal não presencial e transações com cartão de débito são melhor modeladas por modelagem ARIMA, ao passo que a quantidade de POSs e transações por instrumento (cartão crédito e transferências) foram melhor modeladas por Neural network autoregression**. Entretanto, foram considerados, até agora, modelos que não consideram a heterocedasticidade que foi verificada nas séries.
 
 De tal modo, foi testada a modelagem da família GARCH(1,1) (modelo APARCH, pois generaliza diversos modelos da família) na modelagem ARIMA para verificar se, com isso, o resultado será melhor do que os resultados obtidos até aqui. Cabe ressaltar que a distribuição de probabilidade escolhida para cada caso diz respeito ao seu resultado do teste Jarque-Bera (normalidade), bem como a análise dos 3º e 4º momentos presentes na tabela descritiva das séries.
 
@@ -643,7 +643,7 @@ debito<-ts(debito$y,start=2010,frequency = 4) #Transformação em time serie
 
 ```{r}
 ###Resultado
-forcasting<-forecast(nnetar(debito, lambda = 0),h=12)
+forcasting<-forecast(auto.arima(debito),h=12)
 forecasting2<-as.data.frame(forcasting$mean)
 crescimento19<-((forecasting2[nrow(forecasting2)-4,]/forecasting2[nrow(forecasting2)-7,])-1)*100
 crescimento20<-((forecasting2[nrow(forecasting2),]/forecasting2[nrow(forecasting2)-3,])-1)*100

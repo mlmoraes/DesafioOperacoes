@@ -248,7 +248,7 @@ menorMSE == MSE(na.omit(for5$fitted),debito)
 menorMSE == MSE(for6$fitted,debito)
 
 ###Resultado
-forcasting<-forecast(nnetar(debito, lambda = 0),h=12)
+forcasting<-forecast(auto.arima(debito),h=12)
 forecasting2<-as.data.frame(forcasting$mean)
 crescimento19<-((forecasting2[nrow(forecasting2)-4,]/forecasting2[nrow(forecasting2)-7,])-1)*100
 crescimento20<-((forecasting2[nrow(forecasting2),]/forecasting2[nrow(forecasting2)-3,])-1)*100
